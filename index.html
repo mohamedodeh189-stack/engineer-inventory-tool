@@ -85,6 +85,8 @@
   .st-dup { background: var(--dup); }
   .st-unsupported { background: #6b7280; }
   .st-read-failed { background: #b91c1c; }
+  .st-possible-match { background: #0e7490; }
+  .st-ambiguous-candidates { background: #a21caf; }
 
   .coverage-box {
     border: 2px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 14px;
@@ -548,8 +550,9 @@
   function normalizeHeaderForMatch(s) {
     return String(s === null || s === undefined ? '' : s)
       .trim()
-      .replace(/[.\-_]+/g, ' ')
+      .replace(/[.\-_:]+/g, ' ')
       .replace(/\s+/g, ' ')
+      .trim()
       .toLowerCase();
   }
 
@@ -601,6 +604,7 @@
     return {
       masterMap: buildMasterListFromRows(rows),
       engineerNames: extractEngineerNames(rows),
+      identityIndex: buildMasterIdentityIndex(rows),
     };
   }
 
@@ -612,17 +616,211 @@
   }
 
   // ---------------------------------------------------------------------
+  // 6ج) أدلة هوية آمنة (مطابقة محتملة، للمراجعة فقط) — تُشغَّل فقط عندما لا يوجد رقم
+  //     تسجيل صالح واحد بالملف (رقم التسجيل يبقى دائمًا الحكم النهائي إن وُجد). تُستخرَج
+  //     الأدلة حصرًا من خلايا لها تسمية معروفة صراحة (لائحة بيضاء) — لا أي نص عربي
+  //     "يبدو" اسمًا. ملفات الدراسة عادة بصيغة استمارة (تسمية بخلية، والقيمة بالخلية
+  //     المجاورة يمينًا بنفس الصف — تأكَّد هذا فعليًا من بنية ملف حقيقي)، بينما قائمة
+  //     الباحثين جدولية (تسمية بصف عنوان، والقيم أسفلها بنفس العمود).
+  // ---------------------------------------------------------------------
+  const NAME_FIELD_HEADERS = new Set([
+    'name', 'full name', 'beneficiary name',
+    normalizeHeaderForMatch('اسم المستفيد'),
+    normalizeHeaderForMatch('الاسم'),
+    normalizeHeaderForMatch('اسم اللاجئ'),
+    normalizeHeaderForMatch('اسم رب الاسرة'),
+    normalizeHeaderForMatch('اسم رب الأسرة'),
+    normalizeHeaderForMatch('اسم رب/ة الاسرة'),
+    normalizeHeaderForMatch('اسم رب/ة الأسرة'),
+    normalizeHeaderForMatch('رب الاسرة'),
+    normalizeHeaderForMatch('رب الأسرة'),
+  ]);
+  const PHONE_FIELD_HEADERS = new Set([
+    'phone', 'mobile', 'phone number', 'mobile number',
+    normalizeHeaderForMatch('رقم الهاتف'),
+    normalizeHeaderForMatch('الهاتف'),
+    normalizeHeaderForMatch('جوال'),
+    normalizeHeaderForMatch('رقم الجوال'),
+    normalizeHeaderForMatch('موبايل'),
+    normalizeHeaderForMatch('رقم الجوال 1'),
+    normalizeHeaderForMatch('رقم الجوال 2'),
+    normalizeHeaderForMatch('رقم الهاتف 1'),
+    normalizeHeaderForMatch('رقم الهاتف 2'),
+  ]);
+  const SPOUSE_FIELD_HEADERS = new Set([
+    'husband', 'wife', 'spouse', 'spouse name', 'heir', 'heirs',
+    normalizeHeaderForMatch('الزوج'),
+    normalizeHeaderForMatch('الزوجة'),
+    normalizeHeaderForMatch('اسم الزوج'),
+    normalizeHeaderForMatch('اسم الزوجة'),
+    normalizeHeaderForMatch('زوج'),
+    normalizeHeaderForMatch('زوجة'),
+    normalizeHeaderForMatch('الورثة'),
+    normalizeHeaderForMatch('ورثة'),
+    normalizeHeaderForMatch('اسم الورثة'),
+  ]);
+  const CASE_ID_FIELD_HEADERS = new Set([
+    'case number', 'case id', 'case no', 'file number',
+    normalizeHeaderForMatch('رقم الحالة'),
+    normalizeHeaderForMatch('رقم الملف'),
+  ]);
+
+  // ملاحظة: عناوين المهندس (ENGINEER_HEADER_CANDIDATES) والباحث الاجتماعي متعمَّد
+  // إبقاؤهما خارج هذه اللوائح تمامًا -- لا تُعتبَر أدلة هوية للمستفيد إطلاقًا مهما
+  // بدا الاسم بداخلها. أي عنوان لا يطابق حرفيًا (بعد التطبيع) لا يُستخدَم أبدًا.
+  const EVIDENCE_TYPES = [
+    { key: 'name', headers: NAME_FIELD_HEADERS, label: 'اسم المستفيد' },
+    { key: 'phone', headers: PHONE_FIELD_HEADERS, label: 'رقم الهاتف' },
+    { key: 'spouse', headers: SPOUSE_FIELD_HEADERS, label: 'اسم الزوج/الزوجة أو الورثة' },
+    { key: 'caseId', headers: CASE_ID_FIELD_HEADERS, label: 'رقم الحالة/الملف' },
+  ];
+
+  function findHeaderColumns(rows, headerSet) {
+    const cols = [];
+    for (const row of rows) {
+      for (const cell of row.cells) {
+        if (headerSet.has(normalizeHeaderForMatch(cell.text))) {
+          const parsed = parseCellRef(cell.ref);
+          if (parsed) cols.push({ sheetName: row.sheetName, col: parsed.col, row: parsed.row });
+        }
+      }
+    }
+    return cols;
+  }
+
+  /** 'A'->'B', 'Z'->'AA', إلخ (ترقيم أعمدة إكسل، أساس 26 بلا صفر). */
+  function nextColumnLetter(col) {
+    let n = 0;
+    for (const ch of col) n = n * 26 + (ch.charCodeAt(0) - 64);
+    n += 1;
+    let result = '';
+    while (n > 0) {
+      const rem = (n - 1) % 26;
+      result = String.fromCharCode(65 + rem) + result;
+      n = Math.floor((n - 1) / 26);
+    }
+    return result;
+  }
+
+  function normalizePhoneDigits(s) {
+    const digits = normalizeDigits(String(s === null || s === undefined ? '' : s)).replace(/\D/g, '');
+    return digits.length >= 7 ? digits : '';
+  }
+
+  function evidenceCompareKey(type, value) {
+    if (type === 'phone') return normalizePhoneDigits(value);
+    return dedupKey(value);
+  }
+
+  /** يستخرج قيمة الخلية المجاورة يمينًا (نفس الصف) لكل خلية تسمية معروفة -- نمط استمارة
+   * دراسة الحالة الحقيقي (تسمية | قيمة | تسمية | قيمة ... بنفس الصف). */
+  function extractAdjacentFieldValues(rows, headerSet) {
+    const values = new Set();
+    for (const row of rows) {
+      for (const cell of row.cells) {
+        if (!headerSet.has(normalizeHeaderForMatch(cell.text))) continue;
+        const parsed = parseCellRef(cell.ref);
+        if (!parsed) continue;
+        const valueCol = nextColumnLetter(parsed.col);
+        const valueCell = row.cells.find((c) => {
+          const p = parseCellRef(c.ref);
+          return p && p.col === valueCol && p.row === parsed.row;
+        });
+        if (valueCell) {
+          const v = normalizeWhitespace(valueCell.text);
+          if (v) values.add(v);
+        }
+      }
+    }
+    return Array.from(values);
+  }
+
+  /** يستخرج أدلة الهوية الآمنة من ملف دراسة واحد -- فقط من خلايا لها تسمية معروفة صراحة. */
+  function extractIdentityEvidence(rows) {
+    const evidence = {};
+    for (const t of EVIDENCE_TYPES) evidence[t.key] = extractAdjacentFieldValues(rows, t.headers);
+    return evidence;
+  }
+
+  /** يبني فهرس هوية من قائمة الباحثين (بنية جدولية: تسمية بصف عنوان، قيم أسفلها بنفس
+   * العمود) -- لكل نوع دليل: هل الحقل متاح أصلًا بهذه القائمة، وخريطة (قيمة مطبَّعة ->
+   * مجموعة أرقام تسجيل) لتحديد الموثوقية (قيمة تخصّ أكثر من رقم تسجيل = غير موثوقة). */
+  function buildMasterIdentityIndex(rows) {
+    const index = { availableFields: {}, byType: {}, nameByReg: new Map() };
+    for (const t of EVIDENCE_TYPES) {
+      const headerCols = findHeaderColumns(rows, t.headers);
+      index.availableFields[t.key] = headerCols.length > 0;
+      const valueToRegs = new Map();
+      if (headerCols.length) {
+        for (const row of rows) {
+          const regsInRow = new Set();
+          for (const cell of row.cells) {
+            for (const r of extractRegNumbersFromCell(cell.text)) regsInRow.add(r);
+          }
+          if (regsInRow.size !== 1) continue;
+          const reg = Array.from(regsInRow)[0];
+          for (const cell of row.cells) {
+            const parsed = parseCellRef(cell.ref);
+            if (!parsed) continue;
+            const isFieldCol = headerCols.some((hc) => hc.sheetName === row.sheetName && hc.col === parsed.col && parsed.row > hc.row);
+            if (!isFieldCol) continue;
+            const val = normalizeWhitespace(cell.text);
+            if (!val) continue;
+            const key = evidenceCompareKey(t.key, val);
+            if (!key) continue;
+            if (!valueToRegs.has(key)) valueToRegs.set(key, new Set());
+            valueToRegs.get(key).add(reg);
+            // نحتفظ بالاسم المُوسَّم رسميًا (لا التخمين القديم) لعرضه كاسم المرشَّح لاحقًا
+            if (t.key === 'name' && !index.nameByReg.has(reg)) index.nameByReg.set(reg, val);
+          }
+        }
+      }
+      index.byType[t.key] = valueToRegs;
+    }
+    return index;
+  }
+
+  /** يطابق ملفًا بلا رقم تسجيل مؤكَّد بأدلة الهوية الآمنة ضد فهرس قائمة الباحثين. يتطلب
+   * نوعين مستقلّين على الأقل (لا نفس النوع مكررًا، ولا اسم الملف) يشيران لنفس رقم تسجيل
+   * واحد ليصبح "مطابقة محتملة". قيمة تخصّ أكثر من رقم بقائمة الباحثين = غير موثوقة،
+   * تُستبعَد تمامًا. يعيد { qualifying: [[reg, Set(types)], ...] } (>=1 عنصر = مرشَّح واحد
+   * أو أكثر بدليلين فأكثر؛ قائمة فارغة = لا مرشَّح كافٍ). */
+  function matchByEvidence(fileEvidence, masterIndex) {
+    const supportCount = new Map(); // reg -> Set(types)
+    for (const t of EVIDENCE_TYPES) {
+      if (!masterIndex.availableFields[t.key]) continue; // الحقل غير متاح بقائمة الباحثين إطلاقًا
+      const fileValues = fileEvidence[t.key] || [];
+      const regsForThisType = new Set();
+      for (const raw of fileValues) {
+        const key = evidenceCompareKey(t.key, raw);
+        if (!key) continue;
+        const regs = masterIndex.byType[t.key].get(key);
+        if (!regs || regs.size !== 1) continue; // غير موجود، أو قيمة غير موثوقة (تخصّ أكثر من رقم)
+        regsForThisType.add(Array.from(regs)[0]);
+      }
+      for (const reg of regsForThisType) {
+        if (!supportCount.has(reg)) supportCount.set(reg, new Set());
+        supportCount.get(reg).add(t.key);
+      }
+    }
+    const qualifying = Array.from(supportCount.entries()).filter(([, types]) => types.size >= 2);
+    return { qualifying };
+  }
+
+  // ---------------------------------------------------------------------
   // 7) التصنيف: أولوية الفحص لكل ملف —
   //    لا يوجد رقم > أكثر من رقم بالملف > مكرر بين ملفات > مطابق/غير موجود.
   // ---------------------------------------------------------------------
   const STATUS = {
     MATCHED: 'مطابق',
     NOT_IN_LIST: 'رقم غير موجود في القائمة',
-    NO_NUMBER: 'لا يوجد رقم',
+    NO_NUMBER: 'لم يتم التعرف على الدراسة',
     MULTIPLE_IN_FILE: 'أكثر من رقم داخل الملف',
     DUPLICATE_ACROSS_FILES: 'رقم مكرر في أكثر من ملف',
     UNSUPPORTED_FORMAT: 'تعذّر قراءته — صيغة .xls القديمة غير مدعومة',
     READ_FAILED: 'تعذّر قراءته — خطأ في فتح الملف',
+    POSSIBLE_MATCH: 'مطابقة محتملة — تحتاج مراجعة',
+    AMBIGUOUS_CANDIDATES: 'أكثر من تطابق محتمل — يحتاج مراجعة',
   };
 
   // مفاتيح إنجليزية ثابتة (لأصناف CSS) — النص العربي بالأعلى قد يحوي شرطات/أقواس لا يصلح
@@ -635,6 +833,8 @@
     [STATUS.DUPLICATE_ACROSS_FILES]: 'dup',
     [STATUS.UNSUPPORTED_FORMAT]: 'unsupported',
     [STATUS.READ_FAILED]: 'read-failed',
+    [STATUS.POSSIBLE_MATCH]: 'possible-match',
+    [STATUS.AMBIGUOUS_CANDIDATES]: 'ambiguous-candidates',
   };
 
   // ---------------------------------------------------------------------
@@ -712,8 +912,12 @@
 
     const fakeFile = { name: fileLike.name, arrayBuffer: async () => buf };
     try {
-      const { regNumbers, detectedNameByReg } = await scanFileForRegistrations(fakeFile);
-      return { relativePath, kind, outcome: 'read', reason: '', regNumbers, detectedNameByReg };
+      const rows = await readWorkbookRows(fakeFile);
+      const { regNumbers, detectedNameByReg } = scanRowsForRegistrations(rows);
+      // أدلة الهوية الآمنة لا تُستخرَج ولا تُستخدَم إطلاقًا إلا لو غاب رقم تسجيل صالح
+      // واحد -- رقم التسجيل الصريح يبقى دائمًا الحكم النهائي عند وجوده.
+      const identityEvidence = regNumbers.length === 0 ? extractIdentityEvidence(rows) : null;
+      return { relativePath, kind, outcome: 'read', reason: '', regNumbers, detectedNameByReg, identityEvidence };
     } catch (e) {
       return {
         relativePath, kind, outcome: 'failed',
@@ -723,8 +927,10 @@
     }
   }
 
-  function classifyFiles(fileScanResults, masterMap) {
-    // fileScanResults: [{ relativePath, kind, outcome, regNumbers, detectedNameByReg, reason }]
+  /** masterIdentityIndex اختياري تمامًا (وسيط ثالث) -- لو غاب، السلوك مطابق تمامًا لما
+   * كان عليه قبل إضافة المطابقة المحتملة (توافق خلفي كامل مع كل الاستخدامات القديمة). */
+  function classifyFiles(fileScanResults, masterMap, masterIdentityIndex) {
+    // fileScanResults: [{ relativePath, kind, outcome, regNumbers, detectedNameByReg, reason, identityEvidence }]
     const countAcrossFiles = new Map(); // regNumber -> عدد الملفات المقروءة فعليًا بهذا الرقم المفرد
     for (const f of fileScanResults) {
       if (f.outcome === 'read' && f.regNumbers.length === 1) {
@@ -735,13 +941,31 @@
 
     return fileScanResults.map((f) => {
       let status, regNumber = '', listName = '', detectedName = '';
+      let candidateRegistrationNumber = '', candidateListName = '', evidence = [];
 
       if (f.outcome === 'skipped') {
         status = STATUS.UNSUPPORTED_FORMAT;
       } else if (f.outcome === 'failed') {
         status = STATUS.READ_FAILED;
       } else if (f.regNumbers.length === 0) {
-        status = STATUS.NO_NUMBER;
+        // رقم التسجيل غاب -- المطابقة المحتملة بالأدلة الآمنة تُحاوَل فقط لو الفهرس متاح
+        let qualifying = [];
+        if (masterIdentityIndex && f.identityEvidence) {
+          qualifying = matchByEvidence(f.identityEvidence, masterIdentityIndex).qualifying;
+        }
+        if (qualifying.length === 1) {
+          status = STATUS.POSSIBLE_MATCH;
+          const [reg, types] = qualifying[0];
+          candidateRegistrationNumber = reg;
+          // الاسم المُوسَّم رسميًا (من فهرس الهوية) أولى من "الاسم المكتشَف" القديم
+          // (تخمين بالطول الأطول بالصف) -- أدق وأكثر أمانًا لعرضه كاسم مرشَّح.
+          candidateListName = (masterIdentityIndex && masterIdentityIndex.nameByReg.get(reg)) || masterMap.get(reg) || '';
+          evidence = EVIDENCE_TYPES.filter((t) => types.has(t.key)).map((t) => t.label);
+        } else if (qualifying.length > 1) {
+          status = STATUS.AMBIGUOUS_CANDIDATES;
+        } else {
+          status = STATUS.NO_NUMBER;
+        }
       } else if (f.regNumbers.length > 1) {
         status = STATUS.MULTIPLE_IN_FILE;
         regNumber = f.regNumbers.join(', ');
@@ -768,6 +992,10 @@
         list_name: listName,
         detected_name: detectedName,
         status,
+        candidate_registration_number: candidateRegistrationNumber,
+        candidate_list_name: candidateListName,
+        evidence,
+        review_required: status === STATUS.POSSIBLE_MATCH || status === STATUS.AMBIGUOUS_CANDIDATES,
       };
     });
   }
@@ -829,6 +1057,10 @@
     extractEngineerNames,
     analyzeMasterListFile,
     resolvePreselectedEngineer,
+    EVIDENCE_TYPES,
+    extractIdentityEvidence,
+    buildMasterIdentityIndex,
+    matchByEvidence,
     classifyFiles,
     buildCoverageCheck,
     buildReport,
@@ -863,6 +1095,7 @@
   // تُقرَأ قائمة الباحثين مرة واحدة فقط (خطوة 1) وتُحفَظ نتيجتها هنا لإعادة استخدامها
   // بالفحص لاحقًا، بلا أي إعادة قراءة للملف نفسه.
   let masterMap = null;
+  let masterIdentityIndex = null;
   let masterFileName = '';
   let selectedEngineer = '';
 
@@ -911,6 +1144,7 @@
   masterInput.addEventListener('change', async () => {
     clearBox(masterErrBox);
     masterMap = null;
+    masterIdentityIndex = null;
     masterFileName = '';
     resetFromEngineerStep();
     engineerSelect.innerHTML = '<option value="">جارٍ القراءة…</option>';
@@ -920,8 +1154,9 @@
 
     try {
       const adapted = browserFileAdapter(file);
-      const { masterMap: mm, engineerNames } = await InventoryCore.analyzeMasterListFile(adapted);
+      const { masterMap: mm, engineerNames, identityIndex } = await InventoryCore.analyzeMasterListFile(adapted);
       masterMap = mm;
+      masterIdentityIndex = identityIndex;
       masterFileName = file.name;
 
       if (!engineerNames.length) {
@@ -1020,7 +1255,7 @@
         await new Promise((r2) => setTimeout(r2, 0));
       }
 
-      const classified = InventoryCore.classifyFiles(scanResults, masterMap);
+      const classified = InventoryCore.classifyFiles(scanResults, masterMap, masterIdentityIndex);
       const report = InventoryCore.buildReport(selectedEngineer, masterFileName, classified);
       lastReport = report;
       renderResults(report);
@@ -1081,14 +1316,18 @@
     for (const r of lastReport.results) {
       if (activeFilter && r.status !== activeFilter) continue;
       if (q && !(r.relative_path.toLowerCase().includes(q) || r.registration_number.toLowerCase().includes(q))) continue;
+      const isPossible = r.status === InventoryCore.STATUS.POSSIBLE_MATCH;
+      const regCell = isPossible ? `مرشَّح: ${r.candidate_registration_number}` : (r.registration_number || '—');
+      const nameCell = isPossible ? r.candidate_list_name : r.list_name;
+      const noteCell = isPossible ? 'الأدلة: ' + r.evidence.join(' + ') : (r.reason || '');
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${escapeHtml(r.relative_path)}</td>
-        <td>${escapeHtml(r.registration_number || '—')}</td>
-        <td>${escapeHtml(r.list_name || '—')}</td>
+        <td>${escapeHtml(regCell)}</td>
+        <td>${escapeHtml(nameCell || '—')}</td>
         <td>${escapeHtml(r.detected_name || '—')}</td>
         <td><span class="status-pill ${statusClass(r.status)}">${escapeHtml(r.status)}</span></td>
-        <td>${escapeHtml(r.reason || '')}</td>`;
+        <td>${escapeHtml(noteCell)}</td>`;
       resultsBody.appendChild(tr);
     }
   }
