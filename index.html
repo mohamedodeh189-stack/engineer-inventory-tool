@@ -87,6 +87,7 @@
   .st-read-failed { background: #b91c1c; }
   .st-possible-match { background: #0e7490; }
   .st-ambiguous-candidates { background: #a21caf; }
+  .st-ignored-temp { background: #64748b; }
 
   .coverage-box {
     border: 2px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 14px;
@@ -821,6 +822,7 @@
     READ_FAILED: 'تعذّر قراءته — خطأ في فتح الملف',
     POSSIBLE_MATCH: 'مطابقة محتملة — تحتاج مراجعة',
     AMBIGUOUS_CANDIDATES: 'أكثر من تطابق محتمل — يحتاج مراجعة',
+    IGNORED_TEMP_LOCK: 'ملفات Excel مؤقتة تم تجاهلها',
   };
 
   // مفاتيح إنجليزية ثابتة (لأصناف CSS) — النص العربي بالأعلى قد يحوي شرطات/أقواس لا يصلح
@@ -835,6 +837,7 @@
     [STATUS.READ_FAILED]: 'read-failed',
     [STATUS.POSSIBLE_MATCH]: 'possible-match',
     [STATUS.AMBIGUOUS_CANDIDATES]: 'ambiguous-candidates',
+    [STATUS.IGNORED_TEMP_LOCK]: 'ignored-temp',
   };
 
   // ---------------------------------------------------------------------
@@ -861,11 +864,29 @@
     return 'other';
   }
 
+  /** ملفات قفل Excel المؤقتة (تُنشَأ تلقائيًا عند فتح أي ملف Excel، تبقى أحيانًا عالقة
+   * بعد إغلاق غير سليم) -- تحمل نفس امتداد الملف الأصلي لكنها ليست ملف دراسة إطلاقًا،
+   * وليست "فشلًا" بأي معنى، فقط ضجيج نظام تشغيل يجب استبعاده قبل أي محاولة قراءة. */
+  function isTempLockFile(fileName) {
+    return /^~\$/.test(String(fileName || ''));
+  }
+
   /** يحاول قراءة ملف بأمان تام — لا يرمي استثناءً أبدًا، بل يعيد outcome صريحًا:
    * 'read' (نجحت القراءة فعليًا) | 'skipped' (صيغة .xls غير مدعومة بنيويًا، لم تُحاوَل
-   * قراءتها إطلاقًا) | 'failed' (حاولنا القراءة فعليًا وفشلت — تالف/محمي بكلمة سر/غير صالح). */
+   * قراءتها إطلاقًا) | 'failed' (حاولنا القراءة فعليًا وفشلت — تالف/محمي بكلمة سر/غير صالح)
+   * | 'ignored' (ملف قفل Excel مؤقت -- ليس ملف دراسة، ليس فاشلًا، ليس مقروءًا؛ يُستبعَد
+   * قبل أي محاولة قراءة إطلاقًا ويُعَدّ بعداد منفصل تمامًا عن كل الفئات الأخرى). */
   async function scanFileSafe(fileLike) {
     const relativePath = fileLike.relativePath || fileLike.name;
+
+    if (isTempLockFile(fileLike.name)) {
+      return {
+        relativePath, kind: 'other', outcome: 'ignored',
+        reason: 'ملف قفل Excel مؤقت (يبدأ بـ ~$) — ينشئه Excel تلقائيًا وليس ملف دراسة، استُبعِد قبل أي محاولة قراءة.',
+        regNumbers: [], detectedNameByReg: new Map(),
+      };
+    }
+
     const kind = detectFileKind(fileLike.name);
 
     if (kind === 'xls') {
@@ -943,7 +964,9 @@
       let status, regNumber = '', listName = '', detectedName = '';
       let candidateRegistrationNumber = '', candidateListName = '', evidence = [];
 
-      if (f.outcome === 'skipped') {
+      if (f.outcome === 'ignored') {
+        status = STATUS.IGNORED_TEMP_LOCK;
+      } else if (f.outcome === 'skipped') {
         status = STATUS.UNSUPPORTED_FORMAT;
       } else if (f.outcome === 'failed') {
         status = STATUS.READ_FAILED;
@@ -1000,11 +1023,17 @@
     });
   }
 
+  /** ملفات قفل Excel المؤقتة (~$...) لا تدخل أي عدّ هنا إطلاقًا (لا total_files، لا
+   * read_ok، لا failed، لا by_extension) -- لها عدّاد منفصل تمامًا (ignored_temp_files)
+   * لأنها ببساطة ليست ملفات دراسة ولا ينبغي أن تُحتسَب كأنها كذلك. */
   function buildCoverageCheck(results) {
+    const realResults = results.filter((r) => r.outcome !== 'ignored');
+    const ignoredResults = results.filter((r) => r.outcome === 'ignored');
+
     const byExt = { xlsx: 0, xlsm: 0, xls: 0, other: 0 };
     let readOk = 0, skipped = 0, failed = 0;
     const skippedFiles = [], failedFiles = [];
-    for (const r of results) {
+    for (const r of realResults) {
       const kind = byExt.hasOwnProperty(r.kind) ? r.kind : 'other';
       byExt[kind]++;
       if (r.outcome === 'read') readOk++;
@@ -1012,14 +1041,16 @@
       else if (r.outcome === 'failed') { failed++; failedFiles.push({ relative_path: r.relative_path, reason: r.reason }); }
     }
     return {
-      total_files: results.length,
+      total_files: realResults.length,
       read_ok: readOk,
       skipped,
       failed,
       by_extension: byExt,
       skipped_files: skippedFiles,
       failed_files: failedFiles,
-      all_files_accounted_for: readOk + skipped + failed === results.length,
+      all_files_accounted_for: readOk + skipped + failed === realResults.length,
+      ignored_temp_files: ignoredResults.length,
+      ignored_temp_files_list: ignoredResults.map((r) => ({ relative_path: r.relative_path, reason: r.reason })),
     };
   }
 
@@ -1049,6 +1080,7 @@
     readWorkbookRows,
     scanFileForRegistrations,
     detectFileKind,
+    isTempLockFile,
     scanFileSafe,
     buildMasterList,
     normalizeWhitespace,
