@@ -1,0 +1,1119 @@
+<meta charset="utf-8">
+<title>جرد دراساتي — مشروع المأوى في الأونروا</title>
+<style>
+  :root {
+    --brand: #0e6e55;
+    --brand-dark: #0a4d3c;
+    --bg: #f4f7f6;
+    --card: #ffffff;
+    --ink: #1c2b28;
+    --muted: #5b6b67;
+    --line: #dbe6e2;
+    --matched: #1e8e3e;
+    --not-in-list: #c5221f;
+    --no-number: #9aa0a6;
+    --multi: #e8710a;
+    --dup: #8430ce;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif; direction: rtl; text-align: right;
+    font-size: 18px; line-height: 1.6;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 18px 60px; }
+  header.hero {
+    background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+    color: #fff; border-radius: 16px; padding: 26px 28px; margin-bottom: 22px;
+    box-shadow: 0 6px 18px rgba(10,77,60,.25);
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 30px; }
+  header.hero p { margin: 0; font-size: 17px; opacity: .95; }
+  .badge-safe {
+    display: inline-block; margin-top: 12px; background: rgba(255,255,255,.18);
+    border: 1px solid rgba(255,255,255,.4); border-radius: 999px; padding: 6px 14px; font-size: 14px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 20px 22px; margin-bottom: 18px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 50%; background: var(--brand); color: #fff;
+    font-weight: 700; margin-left: 10px; flex: none;
+  }
+  .step-title { display: flex; align-items: center; font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+  input[type=text], input[type=file], select {
+    width: 100%; font-size: 17px; padding: 12px 14px; border: 2px solid var(--line);
+    border-radius: 10px; background: #fbfdfc; color: var(--ink); font-family: inherit;
+  }
+  select:disabled, input:disabled { background: #eef2f1; color: var(--muted); cursor: not-allowed; }
+  input[type=text]:focus, select:focus { outline: none; border-color: var(--brand); }
+  .confirm-table { width: 100%; margin-top: 4px; }
+  .confirm-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); }
+  .confirm-table td:first-child { font-weight: 700; width: 170px; color: var(--muted); }
+  .hint { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .big-btn {
+    display: block; width: 100%; font-size: 22px; font-weight: 800; padding: 18px;
+    border: none; border-radius: 14px; background: var(--brand); color: #fff; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(14,110,85,.3); transition: transform .08s, background .2s;
+  }
+  .big-btn:hover:not(:disabled) { background: var(--brand-dark); }
+  .big-btn:active:not(:disabled) { transform: scale(0.99); }
+  .big-btn:disabled { background: #b7c4c0; cursor: not-allowed; box-shadow: none; }
+  .secondary-btn {
+    font-size: 16px; font-weight: 700; padding: 10px 18px; border-radius: 10px;
+    border: 2px solid var(--brand); background: #fff; color: var(--brand); cursor: pointer;
+  }
+  .secondary-btn:disabled { opacity: .4; cursor: not-allowed; }
+  #progressWrap { display: none; margin-top: 16px; }
+  #progressBarOuter { background: var(--line); border-radius: 999px; height: 14px; overflow: hidden; }
+  #progressBarInner { background: var(--brand); height: 100%; width: 0%; transition: width .15s; }
+  #progressLabel { text-align: center; margin-top: 8px; color: var(--muted); font-size: 15px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 14px; }
+  .summary-cell {
+    border-radius: 12px; padding: 14px; text-align: center; color: #fff; cursor: pointer;
+    border: 3px solid transparent; user-select: none;
+  }
+  .summary-cell.active { border-color: var(--ink); }
+  .summary-cell .n { font-size: 30px; font-weight: 800; display: block; }
+  .summary-cell .l { font-size: 14px; }
+  .st-matched { background: var(--matched); }
+  .st-not-in-list { background: var(--not-in-list); }
+  .st-no-number { background: var(--no-number); }
+  .st-multi { background: var(--multi); }
+  .st-dup { background: var(--dup); }
+  .st-unsupported { background: #6b7280; }
+  .st-read-failed { background: #b91c1c; }
+
+  .coverage-box {
+    border: 2px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 14px;
+  }
+  .coverage-box.coverage-ok { border-color: var(--matched); background: #eefbf1; }
+  .coverage-box.coverage-warn { border-color: var(--multi); background: #fff7ec; }
+  .coverage-line { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .coverage-sub { color: var(--muted); font-size: 15px; }
+  .coverage-list { margin-top: 10px; font-size: 14px; }
+  .coverage-list ul { margin: 6px 0 0; padding-inline-start: 20px; }
+  .coverage-list li { margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 15px; }
+  th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; }
+  th { background: #eef4f2; position: sticky; top: 0; }
+  tr:hover td { background: #f6faf9; }
+  .status-pill { display: inline-block; padding: 3px 10px; border-radius: 999px; color: #fff; font-size: 13px; white-space: nowrap; }
+  #searchBox { margin: 14px 0; }
+  #resultsCard { display: none; }
+  #exportBtn { margin-top: 16px; }
+  footer { text-align: center; color: var(--muted); font-size: 14px; margin-top: 26px; }
+  .err-box {
+    background: #fdecea; border: 1px solid #f5c6c3; color: #7c2d29; border-radius: 10px;
+    padding: 12px 16px; margin-top: 12px; display: none; white-space: pre-wrap;
+  }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <h1>🗂️ جرد دراساتي</h1>
+    <p>افحص كل ملفات الدراسة عندك تلقائيًا وقارنها برقم التسجيل بقائمة الباحثين — بلمحة واحدة تعرف:
+       أي حالة موجودة فعلًا، وأي رقم ناقص أو مكرر أو غير مسجَّل.</p>
+    <span class="badge-safe">🔒 يعمل بالكامل على جهازك — لا إنترنت، لا تثبيت، لا تعديل على أي ملف Excel</span>
+  </header>
+
+  <div class="card">
+    <div class="step-title"><span class="step-num">1</span> قائمة الباحثين (القائمة الرئيسية)</div>
+    <input type="file" id="masterListInput" accept=".xlsx,.xlsm,.xls">
+    <div class="hint">هذا الملف لا يُعدَّل إطلاقًا — يُقرَأ فقط لاستخراج أسماء المهندسين ومقارنة أرقام التسجيل.</div>
+    <div class="err-box" id="masterErrBox"></div>
+  </div>
+
+  <div class="card" id="engineerCard">
+    <div class="step-title"><span class="step-num">2</span> اختر اسمك</div>
+    <select id="engineerSelect" disabled>
+      <option value="">— اختر ملف قائمة الباحثين أولًا —</option>
+    </select>
+    <div class="hint">الأسماء مستخرجة تلقائيًا من عمود اسم المهندس بقائمة الباحثين (يقبل عناوين معروفة عربية أو إنجليزية) — بلا كتابة يدوية.</div>
+    <div class="err-box" id="engineerErrBox"></div>
+  </div>
+
+  <div class="card">
+    <div class="step-title"><span class="step-num">3</span> مجلد الدراسات</div>
+    <input type="file" id="studiesInput" webkitdirectory directory multiple disabled>
+    <div class="hint">تُفحَص كل ملفات Excel داخل هذا المجلد وكل مجلداته الفرعية تلقائيًا. (يُفعَّل بعد اختيار اسمك)</div>
+  </div>
+
+  <div class="card" id="confirmCard" style="display:none">
+    <div class="step-title"><span class="step-num">4</span> تأكيد قبل الفحص</div>
+    <table class="confirm-table">
+      <tr><td>اسم المهندس</td><td id="confEngineer"></td></tr>
+      <tr><td>قائمة الباحثين</td><td id="confMaster"></td></tr>
+      <tr><td>مجلد الدراسات</td><td id="confFolder"></td></tr>
+    </table>
+    <button class="big-btn" id="scanBtn" style="margin-top:18px">🔍 ابدأ فحص دراساتي</button>
+    <div id="progressWrap">
+      <div id="progressBarOuter"><div id="progressBarInner"></div></div>
+      <div id="progressLabel"></div>
+    </div>
+    <div class="err-box" id="errBox"></div>
+  </div>
+
+  <div class="card" id="resultsCard">
+    <div class="step-title">✅ فحص التوافق — هل فُحص كل ملف فعليًا؟</div>
+    <div id="coverageBox" class="coverage-box"></div>
+
+    <div class="step-title" style="margin-top:22px">📊 النتائج</div>
+    <div class="summary-grid" id="summaryGrid"></div>
+    <input type="text" id="searchBox" placeholder="ابحث برقم التسجيل أو اسم الملف…">
+    <div style="overflow-x:auto">
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th>الملف</th><th>رقم التسجيل</th><th>الاسم بالقائمة</th><th>الاسم المكتشَف</th><th>الحالة</th><th>ملاحظة</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+    <button class="big-btn" id="exportBtn" disabled>⬇️ تصدير تقرير JSON (.shelter-inventory.json)</button>
+  </div>
+
+  <footer>مشروع المأوى في الأونروا — أداة جرد ذاتية الاحتواء، بلا اتصال بالإنترنت، بلا تعديل على ملفات Excel.</footer>
+</div>
+
+<script>
+/*
+ * inventory_core.js — منطق أداة "جرد دراساتي" (بلا أي اعتماد خارجي: يعمل في المتصفح
+ * وفي Node.js بنفس الكود بلا تعديل، عبر واجهة ملف بسيطة {name, relPath, arrayBuffer()}).
+ * لا يعتمد على أي مكتبة (لا SheetJS ولا غيرها) ولا على DOMParser — يقرأ ZIP/XLSX يدويًا
+ * باستخدام DecompressionStream الأصلية بالمتصفح (نمط 'deflate-raw') + محلّل نصوص XML بسيط.
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) {
+    module.exports = factory();
+  } else {
+    root.InventoryCore = factory();
+  }
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const SCHEMA_VERSION = '1.0';
+
+  // ---------------------------------------------------------------------
+  // 1) التطبيع: أرقام عربية/فارسية → إنجليزية، كل أنواع الشرطات → '-'
+  // ---------------------------------------------------------------------
+  const ARABIC_INDIC = '٠١٢٣٤٥٦٧٨٩';
+  const EASTERN_ARABIC = '۰۱۲۳۴۵۶۷۸۹';
+  const DASH_CHARS = /[-‐‑‒–—−﹘﹣－]/g;
+
+  function normalizeDigits(s) {
+    let out = '';
+    for (const ch of s) {
+      let idx = ARABIC_INDIC.indexOf(ch);
+      if (idx !== -1) { out += String(idx); continue; }
+      idx = EASTERN_ARABIC.indexOf(ch);
+      if (idx !== -1) { out += String(idx); continue; }
+      out += ch;
+    }
+    return out;
+  }
+
+  function normalizeDashes(s) {
+    return s.replace(DASH_CHARS, '-');
+  }
+
+  /** يبني نسخة مُطبَّعة من نص الخلية (أرقام + شرطات) دون حذف أي حرف آخر —
+   * تُستخدَم كأساس للبحث عن رقم التسجيل، والمسافات تُعامَل داخل نمط البحث نفسه. */
+  function normalizeCellText(s) {
+    if (s === null || s === undefined) return '';
+    return normalizeDashes(normalizeDigits(String(s)));
+  }
+
+  // ---------------------------------------------------------------------
+  // 2) استخراج أرقام التسجيل (تبدأ بـ"1-") من نص خلية مُطبَّع، بتسامح مع
+  //    مسافات حول الشرطة أو داخل رقم التسجيل نفسه.
+  // ---------------------------------------------------------------------
+  const REG_NUMBER_RE = /1\s*-\s*([0-9](?:[0-9\s]{2,14})[0-9]|[0-9]{3,15})/g;
+
+  /** يعيد مصفوفة أرقام تسجيل مميّزة (بلا تكرار) من نص خلية واحدة (خام، قبل التطبيع). */
+  function extractRegNumbersFromCell(rawText) {
+    const normalized = normalizeCellText(rawText);
+    const found = new Set();
+    let m;
+    REG_NUMBER_RE.lastIndex = 0;
+    while ((m = REG_NUMBER_RE.exec(normalized)) !== null) {
+      const digits = m[1].replace(/\s+/g, '');
+      if (digits.length >= 4 && digits.length <= 12) {
+        found.add('1-' + digits);
+      }
+    }
+    return Array.from(found);
+  }
+
+  /** هل النص يبدو اسمًا عربيًا صالحًا للعرض (لا للمطابقة)؟ حرف عربي واحد على الأقل
+   * وطول معقول، وليس مجرد رقم تسجيل. */
+  function looksLikeDisplayName(rawText) {
+    if (!rawText) return false;
+    const s = String(rawText).trim();
+    if (s.length < 3) return false;
+    if (!/[؀-ۿ]/.test(s)) return false;
+    if (extractRegNumbersFromCell(s).length > 0 && s.replace(/[0-9٠-٩۰-۹\s\-‐-―]/g, '').length < 3) {
+      return false; // النص عمليًا رقم تسجيل فقط بلا حروف كافية
+    }
+    return true;
+  }
+
+  // ---------------------------------------------------------------------
+  // 3) قارئ ZIP يدوي (End Of Central Directory + Central Directory + Local
+  //    Headers)، يفكّ الضغط عبر DecompressionStream('deflate-raw') الأصلية.
+  // ---------------------------------------------------------------------
+  async function inflateRaw(bytes) {
+    if (typeof DecompressionStream === 'undefined') {
+      throw new Error('DecompressionStream غير مدعومة بهذا المتصفح — استخدم Edge أو Chrome حديث.');
+    }
+    const ds = new DecompressionStream('deflate-raw');
+    const stream = new Response(bytes).body.pipeThrough(ds);
+    const buf = await new Response(stream).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  function readUInt32LE(dv, off) { return dv.getUint32(off, true); }
+  function readUInt16LE(dv, off) { return dv.getUint16(off, true); }
+
+  /** يبحث عن توقيع "End Of Central Directory" (0x06054b50) من نهاية الملف. */
+  function findEOCD(dv) {
+    const sig = 0x06054b50;
+    const maxBack = Math.min(dv.byteLength, 65557);
+    for (let i = dv.byteLength - 22; i >= dv.byteLength - maxBack && i >= 0; i--) {
+      if (readUInt32LE(dv, i) === sig) return i;
+    }
+    throw new Error('ملف ZIP/Excel غير صالح — لا يوجد EOCD.');
+  }
+
+  /** يعيد Map(entryName -> Uint8Array) لكل الملفات الداخلية المطلوبة فقط (لتوفير الوقت),
+   * أو للكل لو wantedNames === null. */
+  async function readZipEntries(arrayBuffer, wantedNames) {
+    const dv = new DataView(arrayBuffer);
+    const bytes = new Uint8Array(arrayBuffer);
+    const eocdOff = findEOCD(dv);
+    const totalEntries = readUInt16LE(dv, eocdOff + 10);
+    let cdOff = readUInt32LE(dv, eocdOff + 16);
+
+    const wanted = wantedNames ? new Set(wantedNames) : null;
+    const result = new Map();
+
+    for (let i = 0; i < totalEntries; i++) {
+      const sig = readUInt32LE(dv, cdOff);
+      if (sig !== 0x02014b50) break;
+      const compMethod = readUInt16LE(dv, cdOff + 10);
+      const compSize = readUInt32LE(dv, cdOff + 20);
+      const nameLen = readUInt16LE(dv, cdOff + 28);
+      const extraLen = readUInt16LE(dv, cdOff + 30);
+      const commentLen = readUInt16LE(dv, cdOff + 32);
+      const localHeaderOff = readUInt32LE(dv, cdOff + 42);
+      const nameBytes = bytes.subarray(cdOff + 46, cdOff + 46 + nameLen);
+      const name = new TextDecoder('utf-8').decode(nameBytes);
+
+      if (!wanted || wanted.has(name)) {
+        const lh = readUInt32LE(dv, localHeaderOff);
+        if (lh !== 0x04034b50) throw new Error('ترويسة محلية غير صالحة في ZIP: ' + name);
+        const lNameLen = readUInt16LE(dv, localHeaderOff + 26);
+        const lExtraLen = readUInt16LE(dv, localHeaderOff + 28);
+        const dataStart = localHeaderOff + 30 + lNameLen + lExtraLen;
+        const compBytes = bytes.subarray(dataStart, dataStart + compSize);
+        let out;
+        if (compMethod === 0) out = compBytes.slice();
+        else if (compMethod === 8) out = await inflateRaw(compBytes);
+        else throw new Error('طريقة ضغط غير مدعومة (' + compMethod + ') لعنصر: ' + name);
+        result.set(name, out);
+      }
+
+      cdOff += 46 + nameLen + extraLen + commentLen;
+    }
+    return result;
+  }
+
+  // ---------------------------------------------------------------------
+  // 4) محلّل XML بسيط جدًّا (Regex فقط) خاص ببنية XLSX الداخلية — يكفي تمامًا
+  //    ولا يحتاج DOMParser (متاحة بالمتصفح فقط وليس Node).
+  // ---------------------------------------------------------------------
+  function decodeXmlEntities(s) {
+    return s
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+      .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+      .replace(/&amp;/g, '&');
+  }
+
+  function getAttr(tagSource, attrName) {
+    const re = new RegExp(attrName.replace(':', '\\:') + '="([^"]*)"');
+    const m = tagSource.match(re);
+    return m ? decodeXmlEntities(m[1]) : null;
+  }
+
+  function parseSharedStrings(xmlText) {
+    const strings = [];
+    const siRe = /<si\b[^>]*>([\s\S]*?)<\/si>|<si\b[^>]*\/>/g;
+    let m;
+    while ((m = siRe.exec(xmlText)) !== null) {
+      const inner = m[1] || '';
+      let text = '';
+      const tRe = /<t\b[^>]*>([\s\S]*?)<\/t>|<t\b[^>]*\/>/g;
+      let tm;
+      let any = false;
+      while ((tm = tRe.exec(inner)) !== null) {
+        any = true;
+        text += decodeXmlEntities(tm[1] || '');
+      }
+      strings.push(any ? text : '');
+    }
+    return strings;
+  }
+
+  function parseWorkbookSheets(xmlText) {
+    const sheets = [];
+    const sheetRe = /<sheet\b[^>]*\/>/g;
+    let m;
+    while ((m = sheetRe.exec(xmlText)) !== null) {
+      const tag = m[0];
+      const name = getAttr(tag, 'name');
+      const rId = getAttr(tag, 'r:id');
+      if (name && rId) sheets.push({ name, rId });
+    }
+    return sheets;
+  }
+
+  function parseRels(xmlText) {
+    const map = {};
+    const relRe = /<Relationship\b[^>]*\/>/g;
+    let m;
+    while ((m = relRe.exec(xmlText)) !== null) {
+      const tag = m[0];
+      const id = getAttr(tag, 'Id');
+      const target = getAttr(tag, 'Target');
+      if (id && target) map[id] = target;
+    }
+    return map;
+  }
+
+  /** يعيد { rows: [{ ref, cells: [{ref, text}] }] } لكل صف فيه خلايا غير فارغة. */
+  function parseSheetCells(xmlText, sharedStrings) {
+    const rows = [];
+    const rowRe = /<row\b[^>]*>([\s\S]*?)<\/row>/g;
+    let rm;
+    while ((rm = rowRe.exec(xmlText)) !== null) {
+      const rowInner = rm[1];
+      const cellRe = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+      let cm;
+      const cells = [];
+      while ((cm = cellRe.exec(rowInner)) !== null) {
+        const attrs = cm[1] || '';
+        const inner = cm[2];
+        const ref = getAttr(attrs, 'r') || '';
+        const type = getAttr(attrs, 't');
+        let text = '';
+        if (inner) {
+          if (type === 's') {
+            const vm = inner.match(/<v>([\s\S]*?)<\/v>/);
+            if (vm) {
+              const idx = parseInt(vm[1], 10);
+              text = sharedStrings[idx] !== undefined ? sharedStrings[idx] : '';
+            }
+          } else if (type === 'inlineStr') {
+            const tm = inner.match(/<t\b[^>]*>([\s\S]*?)<\/t>/);
+            text = tm ? decodeXmlEntities(tm[1]) : '';
+          } else {
+            const vm = inner.match(/<v>([\s\S]*?)<\/v>/);
+            text = vm ? decodeXmlEntities(vm[1]) : '';
+          }
+        }
+        if (ref) cells.push({ ref, text });
+      }
+      if (cells.length) rows.push({ cells });
+    }
+    return rows;
+  }
+
+  // ---------------------------------------------------------------------
+  // 5) قراءة ملف XLSX كامل (من واجهة ملف {arrayBuffer()}) → صفوف كل الأوراق.
+  // ---------------------------------------------------------------------
+  async function readWorkbookRows(fileLike) {
+    const buf = await fileLike.arrayBuffer();
+    const entries = await readZipEntries(buf, null);
+    const decoder = new TextDecoder('utf-8');
+
+    const wbXmlBytes = entries.get('xl/workbook.xml');
+    if (!wbXmlBytes) throw new Error('ليس ملف Excel صالحًا (xl/workbook.xml مفقود): ' + (fileLike.name || ''));
+    const wbXml = decoder.decode(wbXmlBytes);
+    const sheetDefs = parseWorkbookSheets(wbXml);
+
+    const relsBytes = entries.get('xl/_rels/workbook.xml.rels');
+    const rels = relsBytes ? parseRels(decoder.decode(relsBytes)) : {};
+
+    const sstBytes = entries.get('xl/sharedStrings.xml');
+    const sharedStrings = sstBytes ? parseSharedStrings(decoder.decode(sstBytes)) : [];
+
+    const allRows = []; // { sheetName, cells: [{ref, text}] }
+    for (const sheet of sheetDefs) {
+      const target = rels[sheet.rId];
+      if (!target) continue;
+      // الهدف قد يكون مطلقًا من جذر الحزمة ("/xl/worksheets/sheet1.xml") أو نسبيًا لمجلد
+      // xl/ نفسه ("worksheets/sheet1.xml") — لكل من Excel الحقيقي وopenpyxl صيغتهما.
+      const path = target.startsWith('/') ? target.slice(1) : 'xl/' + target.replace(/^\.\//, '');
+      const sheetBytes = entries.get(path);
+      if (!sheetBytes) continue;
+      const sheetXml = decoder.decode(sheetBytes);
+      const rows = parseSheetCells(sheetXml, sharedStrings);
+      for (const row of rows) {
+        allRows.push({ sheetName: sheet.name, cells: row.cells });
+      }
+    }
+    return allRows;
+  }
+
+  // ---------------------------------------------------------------------
+  // 6) استخراج أرقام التسجيل + اسم مكتشَف (للعرض فقط) من صفوف مُقروءة مسبقًا،
+  //    ومن ملف كامل (يقرأ الصفوف بنفسه، للتوافق مع الاستخدام القديم/الاختبارات).
+  // ---------------------------------------------------------------------
+  function scanRowsForRegistrations(rows) {
+    const regNumbers = new Set();
+    const detectedNameByReg = new Map();
+
+    for (const row of rows) {
+      const rowRegs = [];
+      const rowNameCandidates = [];
+      for (const cell of row.cells) {
+        const regs = extractRegNumbersFromCell(cell.text);
+        if (regs.length) rowRegs.push(...regs);
+        else if (looksLikeDisplayName(cell.text)) rowNameCandidates.push(String(cell.text).trim());
+      }
+      for (const r of rowRegs) regNumbers.add(r);
+      if (rowRegs.length && rowNameCandidates.length) {
+        rowNameCandidates.sort((a, b) => b.length - a.length);
+        for (const r of rowRegs) {
+          if (!detectedNameByReg.has(r)) detectedNameByReg.set(r, rowNameCandidates[0]);
+        }
+      }
+    }
+    return { regNumbers: Array.from(regNumbers), detectedNameByReg };
+  }
+
+  async function scanFileForRegistrations(fileLike) {
+    const rows = await readWorkbookRows(fileLike);
+    return scanRowsForRegistrations(rows);
+  }
+
+  function buildMasterListFromRows(rows) {
+    const { regNumbers, detectedNameByReg } = scanRowsForRegistrations(rows);
+    const map = new Map();
+    for (const r of regNumbers) {
+      map.set(r, detectedNameByReg.get(r) || '');
+    }
+    return map;
+  }
+
+  /** يبني خريطة (رقم تسجيل → اسم) من ملف القائمة الرئيسية (قائمة الباحثين). */
+  async function buildMasterList(fileLike) {
+    const rows = await readWorkbookRows(fileLike);
+    return buildMasterListFromRows(rows);
+  }
+
+  // ---------------------------------------------------------------------
+  // 6ب) استخراج أسماء المهندسين من عمود/عمودي "Site Engineer" بقائمة الباحثين.
+  //     تطبيع للعرض: حذف مسافات البداية/النهاية + توحيد المسافات المتكررة —
+  //     لا تغيير لغوي ولا استبدال بالاسم المعروض نفسه.
+  //     تطبيع للمطابقة (دمج التكرار فقط): بالإضافة لما سبق، تُحذف كل المسافات
+  //     الداخلية أيضًا — لأن أسماء عربية مركّبة ("عبد الله"/"عبدالله") تُكتب أحيانًا
+  //     بمسافة وأحيانًا بلا مسافة لنفس الشخص فعليًا (لوحظ حرفيًا بملف حقيقي: قائمة
+  //     20 تحوي "عبد الله تركاوي" أربع مرات و"عبدالله تركاوي" مرة واحدة فقط —
+  //     نفس المهندس بالضبط). الاسم المعروض هو أول تهجئة ظهرت بالملف (لا نخترع
+  //     تهجئة جديدة، فقط نختار من بين ما كُتب فعليًا)، ما يبقيها متوافقة تمامًا مع
+  //     "لا تغيّر الاسم لغويًا ولا تستبدله باسم آخر".
+  // ---------------------------------------------------------------------
+  function normalizeWhitespace(s) {
+    return String(s === null || s === undefined ? '' : s).trim().replace(/\s+/g, ' ');
+  }
+
+  function dedupKey(s) {
+    return normalizeWhitespace(s).replace(/\s+/g, '');
+  }
+
+  function parseCellRef(ref) {
+    const m = /^([A-Z]+)(\d+)$/.exec(ref || '');
+    return m ? { col: m[1], row: parseInt(m[2], 10) } : null;
+  }
+
+  /** تطبيع عنوان عمود للمطابقة فقط (لا يُستخدَم للعرض): يحذف مسافات البداية/النهاية،
+   * يحوّل النقاط والشرطات البسيطة لمسافة ثم يوحّد المسافات المتكررة، ويحوّل الأحرف
+   * الإنجليزية لحالة صغيرة. لا يغيّر النص العربي لغويًا — فقط يوحّد شكل الفواصل. */
+  function normalizeHeaderForMatch(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .trim()
+      .replace(/[.\-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+  }
+
+  // عناوين عمود اسم المهندس المعروفة صراحة (عربي/إنجليزي) -- لائحة بيضاء ثابتة، لا تخمين
+  // من محتوى الأعمدة إطلاقًا. أي عنوان لا يطابق واحدًا من هذه حرفيًا (بعد التطبيع) يُتجاهَل.
+  const ENGINEER_HEADER_CANDIDATES = new Set([
+    'site engineer', 'site eng', 'engineer', 'engineer name',
+    normalizeHeaderForMatch('المهندس'),
+    normalizeHeaderForMatch('اسم المهندس'),
+    normalizeHeaderForMatch('مهندس الموقع'),
+    normalizeHeaderForMatch('اسم مهندس الموقع'),
+    normalizeHeaderForMatch('المهندس المشرف'),
+  ]);
+
+  /** يستخرج أسماء مميّزة (بعد تطبيع المسافات فقط للعرض) من كل الأعمدة التي عنوانها
+   * يطابق أحد عناوين اللائحة البيضاء أعلاه (بعد تطبيع الفواصل/حالة الأحرف) -- مهما
+   * تكرر العنوان، ومهما اختلفت صياغته الدقيقة بين عمودين طالما كلاهما بالّائحة. */
+  function extractEngineerNames(rows) {
+    const headerCols = []; // { sheetName, col, row }
+    for (const row of rows) {
+      for (const cell of row.cells) {
+        if (ENGINEER_HEADER_CANDIDATES.has(normalizeHeaderForMatch(cell.text))) {
+          const parsed = parseCellRef(cell.ref);
+          if (parsed) headerCols.push({ sheetName: row.sheetName, col: parsed.col, row: parsed.row });
+        }
+      }
+    }
+    const names = new Map(); // مفتاح الدمج (بلا أي مسافات) -> أول تهجئة ظهرت فعليًا بالملف
+    for (const hc of headerCols) {
+      for (const row of rows) {
+        if (row.sheetName !== hc.sheetName) continue;
+        for (const cell of row.cells) {
+          const parsed = parseCellRef(cell.ref);
+          if (!parsed || parsed.col !== hc.col || parsed.row <= hc.row) continue;
+          const name = normalizeWhitespace(cell.text);
+          if (!name) continue;
+          const key = dedupKey(name);
+          if (!names.has(key)) names.set(key, name);
+        }
+      }
+    }
+    return Array.from(names.values()).sort((a, b) => a.localeCompare(b, 'ar'));
+  }
+
+  /** يقرأ ملف القائمة الرئيسية مرة واحدة فقط، ويعيد كلًّا من خريطة أرقام التسجيل
+   * وأسماء المهندسين المستخرجة معًا — لتفادي قراءة الملف نفسه مرتين. */
+  async function analyzeMasterListFile(fileLike) {
+    const rows = await readWorkbookRows(fileLike);
+    return {
+      masterMap: buildMasterListFromRows(rows),
+      engineerNames: extractEngineerNames(rows),
+    };
+  }
+
+  /** الاسم المحفوظ محليًا يُعتمَد كاختيار مسبق فقط لو ما زال موجودًا حرفيًا (بعد التطبيع)
+   * ضمن أسماء القائمة الجديدة — وإلا يُتجاهَل بصمت (المستخدم يختار من جديد). */
+  function resolvePreselectedEngineer(remembered, engineerNames) {
+    if (!remembered) return null;
+    return engineerNames.includes(remembered) ? remembered : null;
+  }
+
+  // ---------------------------------------------------------------------
+  // 7) التصنيف: أولوية الفحص لكل ملف —
+  //    لا يوجد رقم > أكثر من رقم بالملف > مكرر بين ملفات > مطابق/غير موجود.
+  // ---------------------------------------------------------------------
+  const STATUS = {
+    MATCHED: 'مطابق',
+    NOT_IN_LIST: 'رقم غير موجود في القائمة',
+    NO_NUMBER: 'لا يوجد رقم',
+    MULTIPLE_IN_FILE: 'أكثر من رقم داخل الملف',
+    DUPLICATE_ACROSS_FILES: 'رقم مكرر في أكثر من ملف',
+    UNSUPPORTED_FORMAT: 'تعذّر قراءته — صيغة .xls القديمة غير مدعومة',
+    READ_FAILED: 'تعذّر قراءته — خطأ في فتح الملف',
+  };
+
+  // مفاتيح إنجليزية ثابتة (لأصناف CSS) — النص العربي بالأعلى قد يحوي شرطات/أقواس لا يصلح
+  // اشتقاق اسم صنف مباشرة منها.
+  const STATUS_KEYS = {
+    [STATUS.MATCHED]: 'matched',
+    [STATUS.NOT_IN_LIST]: 'not-in-list',
+    [STATUS.NO_NUMBER]: 'no-number',
+    [STATUS.MULTIPLE_IN_FILE]: 'multi',
+    [STATUS.DUPLICATE_ACROSS_FILES]: 'dup',
+    [STATUS.UNSUPPORTED_FORMAT]: 'unsupported',
+    [STATUS.READ_FAILED]: 'read-failed',
+  };
+
+  // ---------------------------------------------------------------------
+  // 8) فحص توافق صريح لكل ملف — لا تجاهل صامت. يميّز الصيغة من الامتداد أولًا
+  //    (.xls القديم غير مدعوم بنيويًا بهذا القارئ الذي يفهم ZIP/OOXML فقط)، ثم
+  //    يتحقّق من توقيع البايتات الأولى قبل محاولة قراءة كاملة (ZIP مقابل OLE2
+  //    القديم/ملف محمي بكلمة سر — كلاهما يُخزَّن بصيغة Compound File لا ZIP).
+  // ---------------------------------------------------------------------
+  const ZIP_SIG = [0x50, 0x4b]; // 'PK'
+  const OLE2_SIG = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+
+  function bytesStartWith(bytes, sig) {
+    if (bytes.length < sig.length) return false;
+    for (let i = 0; i < sig.length; i++) if (bytes[i] !== sig[i]) return false;
+    return true;
+  }
+
+  function detectFileKind(fileName) {
+    const m = /\.([a-zA-Z0-9]+)$/.exec(fileName || '');
+    const ext = m ? m[1].toLowerCase() : '';
+    if (ext === 'xlsx') return 'xlsx';
+    if (ext === 'xlsm') return 'xlsm';
+    if (ext === 'xls') return 'xls';
+    return 'other';
+  }
+
+  /** يحاول قراءة ملف بأمان تام — لا يرمي استثناءً أبدًا، بل يعيد outcome صريحًا:
+   * 'read' (نجحت القراءة فعليًا) | 'skipped' (صيغة .xls غير مدعومة بنيويًا، لم تُحاوَل
+   * قراءتها إطلاقًا) | 'failed' (حاولنا القراءة فعليًا وفشلت — تالف/محمي بكلمة سر/غير صالح). */
+  async function scanFileSafe(fileLike) {
+    const relativePath = fileLike.relativePath || fileLike.name;
+    const kind = detectFileKind(fileLike.name);
+
+    if (kind === 'xls') {
+      return {
+        relativePath, kind, outcome: 'skipped',
+        reason: 'صيغة .xls القديمة (Excel 97-2003) — هذه الأداة تقرأ .xlsx و.xlsm فقط.',
+        regNumbers: [], detectedNameByReg: new Map(),
+      };
+    }
+    if (kind !== 'xlsx' && kind !== 'xlsm') {
+      return {
+        relativePath, kind, outcome: 'skipped',
+        reason: 'امتداد غير معروف لهذه الأداة.',
+        regNumbers: [], detectedNameByReg: new Map(),
+      };
+    }
+
+    let buf;
+    try {
+      buf = await fileLike.arrayBuffer();
+    } catch (e) {
+      return {
+        relativePath, kind, outcome: 'failed',
+        reason: 'تعذّرت قراءة الملف من القرص: ' + (e && e.message ? e.message : String(e)),
+        regNumbers: [], detectedNameByReg: new Map(),
+      };
+    }
+
+    const head = new Uint8Array(buf.slice(0, 8));
+    if (bytesStartWith(head, OLE2_SIG)) {
+      return {
+        relativePath, kind, outcome: 'failed',
+        reason: 'الملف محمي بكلمة سر أو محفوظ بصيغة قديمة (OLE2) غير مدعومة — لا يمكن فتحه بلا كلمة السر بأداة تعمل بلا اتصال.',
+        regNumbers: [], detectedNameByReg: new Map(),
+      };
+    }
+    if (!bytesStartWith(head, ZIP_SIG)) {
+      return {
+        relativePath, kind, outcome: 'failed',
+        reason: 'الملف لا يبدأ بتوقيع Excel/ZIP المعروف — قد يكون تالفًا أو ليس ملف Excel فعليًا.',
+        regNumbers: [], detectedNameByReg: new Map(),
+      };
+    }
+
+    const fakeFile = { name: fileLike.name, arrayBuffer: async () => buf };
+    try {
+      const { regNumbers, detectedNameByReg } = await scanFileForRegistrations(fakeFile);
+      return { relativePath, kind, outcome: 'read', reason: '', regNumbers, detectedNameByReg };
+    } catch (e) {
+      return {
+        relativePath, kind, outcome: 'failed',
+        reason: 'تعذّر تحليل محتوى الملف (قد يكون تالفًا): ' + (e && e.message ? e.message : String(e)),
+        regNumbers: [], detectedNameByReg: new Map(),
+      };
+    }
+  }
+
+  function classifyFiles(fileScanResults, masterMap) {
+    // fileScanResults: [{ relativePath, kind, outcome, regNumbers, detectedNameByReg, reason }]
+    const countAcrossFiles = new Map(); // regNumber -> عدد الملفات المقروءة فعليًا بهذا الرقم المفرد
+    for (const f of fileScanResults) {
+      if (f.outcome === 'read' && f.regNumbers.length === 1) {
+        const r = f.regNumbers[0];
+        countAcrossFiles.set(r, (countAcrossFiles.get(r) || 0) + 1);
+      }
+    }
+
+    return fileScanResults.map((f) => {
+      let status, regNumber = '', listName = '', detectedName = '';
+
+      if (f.outcome === 'skipped') {
+        status = STATUS.UNSUPPORTED_FORMAT;
+      } else if (f.outcome === 'failed') {
+        status = STATUS.READ_FAILED;
+      } else if (f.regNumbers.length === 0) {
+        status = STATUS.NO_NUMBER;
+      } else if (f.regNumbers.length > 1) {
+        status = STATUS.MULTIPLE_IN_FILE;
+        regNumber = f.regNumbers.join(', ');
+      } else {
+        const r = f.regNumbers[0];
+        regNumber = r;
+        detectedName = f.detectedNameByReg.get(r) || '';
+        if ((countAcrossFiles.get(r) || 0) > 1) {
+          status = STATUS.DUPLICATE_ACROSS_FILES;
+        } else if (masterMap.has(r)) {
+          status = STATUS.MATCHED;
+          listName = masterMap.get(r) || '';
+        } else {
+          status = STATUS.NOT_IN_LIST;
+        }
+      }
+      return {
+        relative_path: f.relativePath,
+        kind: f.kind || '',
+        outcome: f.outcome || 'read',
+        reason: f.reason || '',
+        registration_number: regNumber,
+        registration_numbers: f.regNumbers,
+        list_name: listName,
+        detected_name: detectedName,
+        status,
+      };
+    });
+  }
+
+  function buildCoverageCheck(results) {
+    const byExt = { xlsx: 0, xlsm: 0, xls: 0, other: 0 };
+    let readOk = 0, skipped = 0, failed = 0;
+    const skippedFiles = [], failedFiles = [];
+    for (const r of results) {
+      const kind = byExt.hasOwnProperty(r.kind) ? r.kind : 'other';
+      byExt[kind]++;
+      if (r.outcome === 'read') readOk++;
+      else if (r.outcome === 'skipped') { skipped++; skippedFiles.push({ relative_path: r.relative_path, reason: r.reason }); }
+      else if (r.outcome === 'failed') { failed++; failedFiles.push({ relative_path: r.relative_path, reason: r.reason }); }
+    }
+    return {
+      total_files: results.length,
+      read_ok: readOk,
+      skipped,
+      failed,
+      by_extension: byExt,
+      skipped_files: skippedFiles,
+      failed_files: failedFiles,
+      all_files_accounted_for: readOk + skipped + failed === results.length,
+    };
+  }
+
+  function buildReport(engineerName, masterListFileName, results, scannedAt) {
+    const summary = {};
+    for (const key of Object.values(STATUS)) summary[key] = 0;
+    for (const r of results) summary[r.status] = (summary[r.status] || 0) + 1;
+    return {
+      schema_version: SCHEMA_VERSION,
+      engineer_name: engineerName,
+      master_list_file: masterListFileName,
+      scanned_at: scannedAt || new Date().toISOString(),
+      coverage_check: buildCoverageCheck(results),
+      summary_counts: summary,
+      results,
+    };
+  }
+
+  return {
+    SCHEMA_VERSION,
+    STATUS,
+    STATUS_KEYS,
+    normalizeCellText,
+    extractRegNumbersFromCell,
+    looksLikeDisplayName,
+    readZipEntries,
+    readWorkbookRows,
+    scanFileForRegistrations,
+    detectFileKind,
+    scanFileSafe,
+    buildMasterList,
+    normalizeWhitespace,
+    normalizeHeaderForMatch,
+    ENGINEER_HEADER_CANDIDATES,
+    extractEngineerNames,
+    analyzeMasterListFile,
+    resolvePreselectedEngineer,
+    classifyFiles,
+    buildCoverageCheck,
+    buildReport,
+  };
+});
+
+</script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const masterInput = $('masterListInput');
+  const masterErrBox = $('masterErrBox');
+  const engineerSelect = $('engineerSelect');
+  const engineerErrBox = $('engineerErrBox');
+  const studiesInput = $('studiesInput');
+  const confirmCard = $('confirmCard');
+  const scanBtn = $('scanBtn');
+  const exportBtn = $('exportBtn');
+  const progressWrap = $('progressWrap');
+  const progressBarInner = $('progressBarInner');
+  const progressLabel = $('progressLabel');
+  const errBox = $('errBox');
+  const resultsCard = $('resultsCard');
+  const summaryGrid = $('summaryGrid');
+  const resultsBody = $('resultsBody');
+  const searchBox = $('searchBox');
+
+  const REMEMBERED_NAME_KEY = 'shelter_inventory_engineer_name';
+
+  // == الترتيب: قائمة الباحثين -> اختيار المهندس -> مجلد الدراسات -> تأكيد -> فحص ==
+  // تُقرَأ قائمة الباحثين مرة واحدة فقط (خطوة 1) وتُحفَظ نتيجتها هنا لإعادة استخدامها
+  // بالفحص لاحقًا، بلا أي إعادة قراءة للملف نفسه.
+  let masterMap = null;
+  let masterFileName = '';
+  let selectedEngineer = '';
+
+  let lastReport = null;
+  let activeFilter = null;
+
+  function statusClass(status) {
+    return 'st-' + (InventoryCore.STATUS_KEYS[status] || 'unknown');
+  }
+
+  function showBox(box, msg) { box.textContent = msg; box.style.display = 'block'; }
+  function clearBox(box) { box.style.display = 'none'; box.textContent = ''; }
+  function showError(msg) { showBox(errBox, msg); }
+  function clearError() { clearBox(errBox); }
+
+  function browserFileAdapter(file) {
+    return {
+      name: file.name,
+      relativePath: file.webkitRelativePath || file.name,
+      arrayBuffer: () => file.arrayBuffer(),
+    };
+  }
+
+  function relativeStudyPath(file) {
+    // يزيل اسم المجلد الجذري من webkitRelativePath ("مجلد/فرعي/ملف.xlsx" -> "فرعي/ملف.xlsx")
+    const rp = file.webkitRelativePath || file.name;
+    const parts = rp.split('/');
+    return parts.length > 1 ? parts.slice(1).join('/') : rp;
+  }
+
+  // ==================== خطوة 1: قائمة الباحثين → استخراج أسماء المهندسين ====================
+  function resetFromEngineerStep() {
+    engineerSelect.disabled = true;
+    engineerSelect.innerHTML = '<option value="">— اختر ملف قائمة الباحثين أولًا —</option>';
+    clearBox(engineerErrBox);
+    selectedEngineer = '';
+    resetFromStudiesStep();
+  }
+  function resetFromStudiesStep() {
+    studiesInput.disabled = true;
+    studiesInput.value = '';
+    confirmCard.style.display = 'none';
+    resultsCard.style.display = 'none';
+  }
+
+  masterInput.addEventListener('change', async () => {
+    clearBox(masterErrBox);
+    masterMap = null;
+    masterFileName = '';
+    resetFromEngineerStep();
+    engineerSelect.innerHTML = '<option value="">جارٍ القراءة…</option>';
+
+    const file = masterInput.files[0];
+    if (!file) { resetFromEngineerStep(); return; }
+
+    try {
+      const adapted = browserFileAdapter(file);
+      const { masterMap: mm, engineerNames } = await InventoryCore.analyzeMasterListFile(adapted);
+      masterMap = mm;
+      masterFileName = file.name;
+
+      if (!engineerNames.length) {
+        engineerSelect.innerHTML = '<option value="">— لا توجد أسماء مهندسين —</option>';
+        showBox(engineerErrBox, 'لم يتم العثور على أي عمود معروف لاسم المهندس بهذا الملف (مثل Site Engineer أو المهندس أو اسم المهندس). تحقّق من قائمة الباحثين ثم اختر الملف من جديد — لا يمكن المتابعة بدون أسماء.');
+        return;
+      }
+
+      engineerSelect.innerHTML = '<option value="">— اختر اسمك —</option>' +
+        engineerNames.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+      engineerSelect.disabled = false;
+
+      // تذكّر الاسم ميزة راحة اختيارية فقط — لو التخزين المحلي غير متاح (سياسات متصفح/شبكة
+      // مقيَّدة) لا يجوز أن يوقف ذلك الخطوة الأساسية (قراءة القائمة وعرض الأسماء).
+      const preselect = InventoryCore.resolvePreselectedEngineer(safeGetRememberedName(), engineerNames);
+      if (preselect) {
+        engineerSelect.value = preselect;
+        onEngineerChanged();
+      }
+    } catch (e) {
+      engineerSelect.innerHTML = '<option value="">— تعذّرت قراءة الملف —</option>';
+      showBox(masterErrBox, 'تعذّرت قراءة ملف قائمة الباحثين: ' + (e && e.message ? e.message : String(e)));
+    }
+  });
+
+  function safeGetRememberedName() {
+    try { return localStorage.getItem(REMEMBERED_NAME_KEY) || ''; } catch (e) { return ''; }
+  }
+  function safeSetRememberedName(name) {
+    try { localStorage.setItem(REMEMBERED_NAME_KEY, name); } catch (e) { /* تخزين محلي غير متاح — تجاهل بصمت */ }
+  }
+
+  // ==================== خطوة 2: اختيار المهندس (قائمة منسدلة فقط، بلا كتابة حرة) ====================
+  function onEngineerChanged() {
+    selectedEngineer = engineerSelect.value;
+    resetFromStudiesStep();
+    if (selectedEngineer) {
+      studiesInput.disabled = false;
+      safeSetRememberedName(selectedEngineer);
+    } else {
+      studiesInput.disabled = true;
+    }
+  }
+  engineerSelect.addEventListener('change', onEngineerChanged);
+
+  // ==================== خطوة 3: مجلد الدراسات → خطوة 4: شاشة التأكيد ====================
+  studiesInput.addEventListener('change', () => {
+    confirmCard.style.display = 'none';
+    if (!studiesInput.files.length || !selectedEngineer || !masterMap) return;
+    const folderName = relativeStudyPathRoot(studiesInput.files[0]);
+    $('confEngineer').textContent = selectedEngineer;
+    $('confMaster').textContent = masterFileName;
+    $('confFolder').textContent = folderName + ' (' + studiesInput.files.length + ' ملف بداخله)';
+    confirmCard.style.display = 'block';
+  });
+
+  function relativeStudyPathRoot(file) {
+    const rp = file.webkitRelativePath || file.name;
+    return rp.split('/')[0];
+  }
+
+  // ==================== خطوة 5: الفحص الفعلي (لا يبدأ إلا بعد اكتمال الخطوات الثلاث) ====================
+  async function runScan() {
+    if (!masterMap || !selectedEngineer || !studiesInput.files.length) {
+      showError('أكمل الخطوات الثلاث أولًا: قائمة الباحثين، ثم اسمك، ثم مجلد الدراسات.');
+      return;
+    }
+    clearError();
+    scanBtn.disabled = true;
+    resultsCard.style.display = 'none';
+    progressWrap.style.display = 'block';
+    progressBarInner.style.width = '0%';
+
+    try {
+      // نفحص كل ملف بامتداد Excel (xlsx/xlsm/xls) — بلا استثناء صامت لأي واحد منها.
+      // الفرز بين "مقروء/متجاهَل (صيغة)/فاشل (تلف أو حماية)" يحصل داخل scanFileSafe نفسها،
+      // وليس هنا، عشان لا يفوتنا أي ملف بلا أن يظهر بنتيجة صريحة بالتقرير النهائي.
+      const allFiles = Array.from(studiesInput.files).filter((f) => /\.(xlsx|xlsm|xls)$/i.test(f.name));
+      if (!allFiles.length) {
+        showError('لم يتم العثور على أي ملف Excel داخل المجلد المختار.');
+        progressWrap.style.display = 'none';
+        scanBtn.disabled = false;
+        return;
+      }
+
+      const scanResults = [];
+      for (let i = 0; i < allFiles.length; i++) {
+        const f = allFiles[i];
+        progressLabel.textContent = `جارٍ فحص الملف ${i + 1} من ${allFiles.length}: ${f.name}`;
+        progressBarInner.style.width = Math.round(((i + 1) / allFiles.length) * 100) + '%';
+        const adapted = browserFileAdapter(f);
+        adapted.relativePath = relativeStudyPath(f);
+        const r = await InventoryCore.scanFileSafe(adapted);
+        scanResults.push(r);
+        // يسمح للواجهة بالتحديث بين الملفات بدل تجميدها أثناء فحص مجلد كبير
+        await new Promise((r2) => setTimeout(r2, 0));
+      }
+
+      const classified = InventoryCore.classifyFiles(scanResults, masterMap);
+      const report = InventoryCore.buildReport(selectedEngineer, masterFileName, classified);
+      lastReport = report;
+      renderResults(report);
+    } catch (e) {
+      showError('تعذّر إتمام الفحص: ' + (e && e.message ? e.message : String(e)));
+    } finally {
+      progressWrap.style.display = 'none';
+      scanBtn.disabled = false;
+    }
+  }
+
+  function renderCoverage(cov) {
+    const box = $('coverageBox');
+    const ok = cov.skipped === 0 && cov.failed === 0;
+    box.className = 'coverage-box ' + (ok ? 'coverage-ok' : 'coverage-warn');
+    let html = `<div class="coverage-line">${ok ? '✅' : '⚠️'} ${cov.total_files} ملف موجود — ${cov.read_ok} تم فحصه — ${cov.skipped} متجاهَل — ${cov.failed} فشل فتحه</div>`;
+    html += `<div class="coverage-sub">حسب الصيغة: .xlsx = ${cov.by_extension.xlsx} · .xlsm = ${cov.by_extension.xlsm} · .xls = ${cov.by_extension.xls}</div>`;
+    if (!cov.all_files_accounted_for) {
+      html += `<div class="coverage-sub" style="color:#b91c1c;font-weight:700">⚠️ تحذير: مجموع (مقروء+متجاهَل+فاشل) لا يطابق إجمالي الملفات — أبلغ عن هذا الخطأ ولا تعتمد على النتيجة.</div>`;
+    }
+    if (cov.skipped_files.length) {
+      html += '<div class="coverage-list"><b>ملفات مُتجاهَلة (صيغة غير مدعومة):</b><ul>' +
+        cov.skipped_files.map((f) => `<li>${escapeHtml(f.relative_path)} — ${escapeHtml(f.reason)}</li>`).join('') + '</ul></div>';
+    }
+    if (cov.failed_files.length) {
+      html += '<div class="coverage-list"><b>ملفات تعذّر فتحها:</b><ul>' +
+        cov.failed_files.map((f) => `<li>${escapeHtml(f.relative_path)} — ${escapeHtml(f.reason)}</li>`).join('') + '</ul></div>';
+    }
+    box.innerHTML = html;
+  }
+
+  function renderResults(report) {
+    resultsCard.style.display = 'block';
+    activeFilter = null;
+    renderCoverage(report.coverage_check);
+    summaryGrid.innerHTML = '';
+    for (const status of Object.values(InventoryCore.STATUS)) {
+      const count = report.summary_counts[status] || 0;
+      const cell = document.createElement('div');
+      cell.className = 'summary-cell ' + statusClass(status);
+      cell.innerHTML = `<span class="n">${count}</span><span class="l">${status}</span>`;
+      cell.addEventListener('click', () => {
+        activeFilter = activeFilter === status ? null : status;
+        document.querySelectorAll('.summary-cell').forEach((c) => c.classList.remove('active'));
+        if (activeFilter) cell.classList.add('active');
+        renderTable();
+      });
+      summaryGrid.appendChild(cell);
+    }
+    renderTable();
+    exportBtn.disabled = false;
+  }
+
+  function renderTable() {
+    if (!lastReport) return;
+    const q = searchBox.value.trim().toLowerCase();
+    resultsBody.innerHTML = '';
+    for (const r of lastReport.results) {
+      if (activeFilter && r.status !== activeFilter) continue;
+      if (q && !(r.relative_path.toLowerCase().includes(q) || r.registration_number.toLowerCase().includes(q))) continue;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.relative_path)}</td>
+        <td>${escapeHtml(r.registration_number || '—')}</td>
+        <td>${escapeHtml(r.list_name || '—')}</td>
+        <td>${escapeHtml(r.detected_name || '—')}</td>
+        <td><span class="status-pill ${statusClass(r.status)}">${escapeHtml(r.status)}</span></td>
+        <td>${escapeHtml(r.reason || '')}</td>`;
+      resultsBody.appendChild(tr);
+    }
+  }
+  searchBox.addEventListener('input', renderTable);
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
+  function exportReport() {
+    if (!lastReport) return;
+    const blob = new Blob([JSON.stringify(lastReport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '.shelter-inventory.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  scanBtn.addEventListener('click', runScan);
+  exportBtn.addEventListener('click', exportReport);
+})();
+</script>
