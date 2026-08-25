@@ -88,6 +88,10 @@
   .st-possible-match { background: #0e7490; }
   .st-ambiguous-candidates { background: #a21caf; }
   .st-ignored-temp { background: #64748b; }
+  .st-amt-extracted { background: var(--matched); }
+  .st-amt-review { background: var(--multi); }
+  .st-amt-not-study { background: var(--no-number); }
+  .st-amt-unreadable { background: #b91c1c; }
 
   .coverage-box {
     border: 2px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 14px;
@@ -177,6 +181,26 @@
       </table>
     </div>
     <button class="big-btn" id="exportBtn" disabled>⬇️ تصدير تقرير JSON (.shelter-inventory.json)</button>
+  </div>
+
+  <div class="card" id="amountsCard" style="display:none">
+    <div class="step-title">💰 مبالغ الدراسات</div>
+    <div class="hint">استخراج تجريبي من نفس ملفات الدراسة المكتشَفة أعلاه — لا يعتمد على القائمة الرئيسية، ولا يعدّل أي ملف Excel. راجع النتيجة قبل التنزيل.</div>
+    <div class="summary-grid" id="amountsSummaryGrid"></div>
+    <div style="overflow-x:auto">
+      <table id="amountsTable">
+        <thead>
+          <tr>
+            <th>رقم العائلة</th><th>المستفيد</th><th>المبلغ</th><th>ملف المصدر</th><th>المسار</th><th>الحالة</th><th>ملاحظة</th>
+          </tr>
+        </thead>
+        <tbody id="amountsBody"></tbody>
+      </table>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap">
+      <button class="big-btn" id="exportAmountsJsonBtn" style="flex:1; min-width:220px" disabled>⬇️ تصدير JSON (.shelter-amounts.json)</button>
+      <button class="big-btn" id="exportAmountsCsvBtn" style="flex:1; min-width:220px" disabled>⬇️ تصدير CSV (.shelter-amounts.csv)</button>
+    </div>
   </div>
 
   <footer>مشروع المأوى في الأونروا — أداة جرد ذاتية الاحتواء، بلا اتصال بالإنترنت، بلا تعديل على ملفات Excel.</footer>
@@ -809,6 +833,253 @@
   }
 
   // ---------------------------------------------------------------------
+  // 6د) استخراج مبلغ الدراسة الإجمالي — Conservative extraction اعتمادًا على تسميات
+  //     الحقول وسياقها، وليس إحداثية خلية ثابتة. يُقيَّد البحث حصرًا بورقة/أوراق
+  //     "الكميات" (أو مرادفاتها المعروفة) كي لا يُحتسَب أي رقم من ورقة "التقييم"
+  //     (نتيجة التقييم الاجتماعي) أو أي ورقة أخرى بالخطأ كأنه مبلغ الدراسة.
+  //     الخلية القياسية (الكميات!E44) ليست مسارًا منفصلًا: هي ببساطة نفس ما يجده هذا
+  //     البحث بالتسمية تلقائيًا طالما القالب لم يتغيّر -- فلا حاجة لمسار Coordinate خام
+  //     موازٍ قد يتعارض معه بصمت.
+  // ---------------------------------------------------------------------
+  const QUANTITIES_SHEET_NAMES = new Set([
+    normalizeHeaderForMatch('الكميات'),
+    normalizeHeaderForMatch('كشف الكميات'),
+    normalizeHeaderForMatch('جدول الكميات'),
+    normalizeHeaderForMatch('كميات'),
+    'quantities', 'boq', 'bill of quantities', 'bill of quantity',
+  ]);
+
+  const TOTAL_LABEL_HEADERS = new Set([
+    normalizeHeaderForMatch('الإجمالي'),
+    normalizeHeaderForMatch('الاجمالي'),
+    normalizeHeaderForMatch('المجموع'),
+    normalizeHeaderForMatch('المجموع الكلي'),
+    normalizeHeaderForMatch('الإجمالي الكلي'),
+    normalizeHeaderForMatch('الاجمالي الكلي'),
+    normalizeHeaderForMatch('الإجمالي العام'),
+    normalizeHeaderForMatch('الاجمالي العام'),
+    normalizeHeaderForMatch('إجمالي التكلفة'),
+    normalizeHeaderForMatch('اجمالي التكلفة'),
+    normalizeHeaderForMatch('المبلغ الإجمالي'),
+    normalizeHeaderForMatch('المبلغ الاجمالي'),
+    normalizeHeaderForMatch('التكلفة الإجمالية'),
+    normalizeHeaderForMatch('التكلفة الاجمالية'),
+    normalizeHeaderForMatch('قيمة الدراسة الإجمالية'),
+    normalizeHeaderForMatch('قيمة الدراسة الاجمالية'),
+    normalizeHeaderForMatch('المجموع النهائي'),
+    'total', 'grand total', 'total cost', 'total amount',
+  ]);
+
+  /** يحوّل نص خلية لمبلغ رقمي بأمان تام -- أرقام عربية/فارسية، فواصل آلاف، رموز/كلمات
+   * عملة شائعة. يعيد null صراحة لو النص ليس رقمًا صافيًا بعد التنظيف (لا تخمين). */
+  function normalizeAmountText(s) {
+    if (s === null || s === undefined) return null;
+    let t = normalizeDigits(String(s)).trim();
+    if (!t) return null;
+    t = t.replace(/[,،]/g, '');
+    t = t.replace(/(شيكل|شيقل|₪|nis|jod|دينار|دولار|usd|\$)/gi, '').trim();
+    if (!/^-?\d+(\.\d+)?$/.test(t)) return null;
+    const n = parseFloat(t);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** يبحث عن أول خلية رقمية صالحة يمينًا (نفس الصف) من خلية تسمية، بتسامح حتى
+   * maxRadius عمود (خلايا تنسيق فارغة بين التسمية والقيمة أمر شائع بجداول الكميات). */
+  function findNumericValueRightOf(rowCells, labelCol, labelRow, maxRadius) {
+    let col = labelCol;
+    for (let i = 0; i < maxRadius; i++) {
+      col = nextColumnLetter(col);
+      const cell = rowCells.find((c) => {
+        const p = parseCellRef(c.ref);
+        return p && p.col === col && p.row === labelRow;
+      });
+      if (cell) {
+        const n = normalizeAmountText(cell.text);
+        if (n !== null) return { value: n, ref: cell.ref };
+      }
+    }
+    return null;
+  }
+
+  /** يستخرج مبلغ الدراسة الإجمالي من صفوف ملف مقروء مسبقًا. محافظ تمامًا: لو لم توجد
+   * ورقة كميات معروفة، أو لم توجد خلية "إجمالي" معروفة بداخلها، أو تعارضت أكثر من قيمة
+   * مرشَّحة، أو القيمة المجاورة ليست رقمًا صالحًا -- يعيد amount: null مع سبب واضح، ولا
+   * يخمّن أبدًا. */
+  function extractStudyAmount(rows) {
+    const matchingSheets = new Set();
+    for (const row of rows) {
+      if (QUANTITIES_SHEET_NAMES.has(normalizeHeaderForMatch(row.sheetName))) matchingSheets.add(row.sheetName);
+    }
+    if (matchingSheets.size === 0) {
+      return {
+        amount: null, status: 'sheet_missing', sheetUsed: null, cellRef: null,
+        reason: 'لم يتم العثور على ورقة الكميات (الكميات/جدول الكميات) داخل هذا الملف.',
+      };
+    }
+
+    const labelHits = [];
+    for (const row of rows) {
+      if (!matchingSheets.has(row.sheetName)) continue;
+      for (const cell of row.cells) {
+        if (!TOTAL_LABEL_HEADERS.has(normalizeHeaderForMatch(cell.text))) continue;
+        const parsed = parseCellRef(cell.ref);
+        if (!parsed) continue;
+        labelHits.push({ sheetName: row.sheetName, col: parsed.col, row: parsed.row, cells: row.cells });
+      }
+    }
+    if (!labelHits.length) {
+      return {
+        amount: null, status: 'label_missing', sheetUsed: Array.from(matchingSheets).join('، '), cellRef: null,
+        reason: 'لم يتم العثور على خلية إجمالي معروفة داخل ورقة الكميات.',
+      };
+    }
+
+    const candidates = [];
+    for (const hit of labelHits) {
+      const found = findNumericValueRightOf(hit.cells, hit.col, hit.row, 4);
+      if (found) candidates.push({ value: found.value, ref: found.ref, sheet: hit.sheetName });
+    }
+    if (!candidates.length) {
+      return {
+        amount: null, status: 'value_not_numeric', sheetUsed: Array.from(matchingSheets).join('، '), cellRef: null,
+        reason: 'وُجدت خلية إجمالي بورقة الكميات لكن لا يوجد بجانبها رقم صالح (قد تكون فارغة أو نصًا غير رقمي).',
+      };
+    }
+
+    const distinctValues = Array.from(new Set(candidates.map((c) => c.value)));
+    if (distinctValues.length > 1) {
+      return {
+        amount: null, status: 'ambiguous', sheetUsed: Array.from(matchingSheets).join('، '), cellRef: null,
+        reason: 'أكثر من قيمة إجمالي محتملة ومتعارضة داخل ورقة الكميات (' + distinctValues.join(' / ') + ').',
+      };
+    }
+
+    const value = distinctValues[0];
+    if (!(value > 0)) {
+      return {
+        amount: null, status: 'non_positive', sheetUsed: candidates[0].sheet, cellRef: candidates[0].ref,
+        reason: 'قيمة الإجمالي المكتشفة غير منطقية (صفر أو سالبة).',
+      };
+    }
+
+    return { amount: value, status: 'ok', sheetUsed: candidates[0].sheet, cellRef: candidates[0].ref, reason: '' };
+  }
+
+  // ---------------------------------------------------------------------
+  // 6ه) بناء تقرير مبالغ الدراسات — يُبنى من نفس نتائج نفس الفحص (fileScanResults) بلا
+  //     أي إعادة قراءة لأي ملف. لا يعتمد على قائمة الباحثين إطلاقًا (رقم العائلة يأتي
+  //     من الملف نفسه). لا يُخفي أي تكرار: التكرارات المتفقة تبقى بحالتها لكن تُعرَض معًا
+  //     صراحة، والمتعارضة تُجبَر جميعها على "يحتاج مراجعة".
+  // ---------------------------------------------------------------------
+  const AMOUNT_STATUS = {
+    EXTRACTED: 'مبلغ مستخرَج',
+    NEEDS_REVIEW: 'يحتاج مراجعة',
+    NOT_A_STUDY: 'لم يتم التعرف عليه كدراسة',
+    UNREADABLE: 'تعذّر قراءته',
+  };
+
+  function resolveBeneficiaryName(names) {
+    if (!names || !names.length) return { name: '', conflict: false };
+    if (names.length === 1) return { name: names[0], conflict: false };
+    return { name: '', conflict: true };
+  }
+
+  function buildAmountsReport(engineerName, masterListFileName, fileScanResults, scannedAt) {
+    const realResults = fileScanResults.filter((f) => f.outcome !== 'ignored');
+    const rows = [];
+
+    for (const f of realResults) {
+      const sourceFileName = (f.relativePath || '').split('/').pop();
+
+      if (f.outcome === 'skipped' || f.outcome === 'failed') {
+        rows.push({
+          relative_path: f.relativePath, source_file_name: sourceFileName,
+          family_number: '', beneficiary_name: '', amount: null,
+          status: AMOUNT_STATUS.UNREADABLE, note: f.reason || '',
+          duplicate_group_size: 0, duplicate_paths: [],
+        });
+        continue;
+      }
+
+      const familyNumber = f.regNumbers.length === 1 ? f.regNumbers[0] : '';
+      const { name, conflict } = resolveBeneficiaryName(f.beneficiaryNames);
+      const amt = f.studyAmount || { amount: null, status: 'sheet_missing', reason: 'لم يُحاوَل استخراج المبلغ.' };
+
+      const reasons = [];
+      if (!familyNumber) {
+        reasons.push(f.regNumbers.length === 0 ? 'رقم عائلة غير موجود داخل الملف' : 'أكثر من رقم عائلة داخل نفس الملف');
+      }
+      if (conflict) reasons.push('أكثر من اسم مستفيد مختلف داخل الملف');
+      if (amt.status !== 'ok') reasons.push(amt.reason);
+
+      let status;
+      if (!familyNumber && !name && amt.status === 'sheet_missing') {
+        status = AMOUNT_STATUS.NOT_A_STUDY;
+        reasons.length = 0;
+        reasons.push('لم يتم العثور على رقم عائلة أو اسم مستفيد أو ورقة كميات داخل هذا الملف — لا يبدو أنه ملف دراسة.');
+      } else if (familyNumber && !conflict && amt.status === 'ok') {
+        status = AMOUNT_STATUS.EXTRACTED;
+      } else {
+        status = AMOUNT_STATUS.NEEDS_REVIEW;
+      }
+
+      rows.push({
+        relative_path: f.relativePath, source_file_name: sourceFileName,
+        family_number: familyNumber, beneficiary_name: name,
+        amount: amt.status === 'ok' ? amt.amount : null,
+        status, note: reasons.join('؛ '),
+        duplicate_group_size: 0, duplicate_paths: [],
+      });
+    }
+
+    // تجميع حسب رقم العائلة -- فقط للصفوف التي لها رقم عائلة صريح واحد.
+    const byFamily = new Map();
+    for (const r of rows) {
+      if (!r.family_number) continue;
+      if (!byFamily.has(r.family_number)) byFamily.set(r.family_number, []);
+      byFamily.get(r.family_number).push(r);
+    }
+    let duplicateFamilyGroups = 0;
+    for (const group of byFamily.values()) {
+      if (group.length < 2) continue;
+      duplicateFamilyGroups++;
+      const paths = group.map((g) => g.relative_path);
+      const amounts = group.map((g) => g.amount);
+      const allHaveAmount = amounts.every((a) => a !== null);
+      const distinctAmounts = Array.from(new Set(amounts.filter((a) => a !== null)));
+      const agree = allHaveAmount && distinctAmounts.length === 1;
+      for (const g of group) {
+        g.duplicate_group_size = group.length;
+        g.duplicate_paths = paths.filter((p) => p !== g.relative_path);
+        if (agree) {
+          g.note = (g.note ? g.note + '؛ ' : '') + `نسخة متعددة متفقة (${group.length} ملفات بنفس رقم العائلة ونفس المبلغ)`;
+        } else {
+          g.status = AMOUNT_STATUS.NEEDS_REVIEW;
+          g.note = (g.note ? g.note + '؛ ' : '') + `تعارض بين ${group.length} نسخ لنفس رقم العائلة — المبالغ غير متطابقة أو ناقصة`;
+        }
+      }
+    }
+
+    const summary = {
+      excel_files_found: realResults.length,
+      extracted: rows.filter((r) => r.status === AMOUNT_STATUS.EXTRACTED).length,
+      needs_review: rows.filter((r) => r.status === AMOUNT_STATUS.NEEDS_REVIEW).length,
+      not_a_study: rows.filter((r) => r.status === AMOUNT_STATUS.NOT_A_STUDY).length,
+      unreadable: rows.filter((r) => r.status === AMOUNT_STATUS.UNREADABLE).length,
+      duplicate_family_groups: duplicateFamilyGroups,
+    };
+
+    return {
+      schema_version: '1.0',
+      engineer_name: engineerName,
+      master_list_file: masterListFileName,
+      scanned_at: scannedAt || new Date().toISOString(),
+      summary,
+      results: rows,
+    };
+  }
+
+  // ---------------------------------------------------------------------
   // 7) التصنيف: أولوية الفحص لكل ملف —
   //    لا يوجد رقم > أكثر من رقم بالملف > مكرر بين ملفات > مطابق/غير موجود.
   // ---------------------------------------------------------------------
@@ -938,7 +1209,14 @@
       // أدلة الهوية الآمنة لا تُستخرَج ولا تُستخدَم إطلاقًا إلا لو غاب رقم تسجيل صالح
       // واحد -- رقم التسجيل الصريح يبقى دائمًا الحكم النهائي عند وجوده.
       const identityEvidence = regNumbers.length === 0 ? extractIdentityEvidence(rows) : null;
-      return { relativePath, kind, outcome: 'read', reason: '', regNumbers, detectedNameByReg, identityEvidence };
+      // مبلغ الدراسة + اسم المستفيد (لميزة "مبالغ الدراسات") يُستخرَجان هنا من نفس rows
+      // المقروءة أعلاه بلا أي فتح ثانٍ للملف -- بصرف النظر عن وجود رقم تسجيل من عدمه.
+      const studyAmount = extractStudyAmount(rows);
+      const beneficiaryNames = extractAdjacentFieldValues(rows, NAME_FIELD_HEADERS);
+      return {
+        relativePath, kind, outcome: 'read', reason: '', regNumbers, detectedNameByReg, identityEvidence,
+        studyAmount, beneficiaryNames,
+      };
     } catch (e) {
       return {
         relativePath, kind, outcome: 'failed',
@@ -952,17 +1230,26 @@
    * كان عليه قبل إضافة المطابقة المحتملة (توافق خلفي كامل مع كل الاستخدامات القديمة). */
   function classifyFiles(fileScanResults, masterMap, masterIdentityIndex) {
     // fileScanResults: [{ relativePath, kind, outcome, regNumbers, detectedNameByReg, reason, identityEvidence }]
-    const countAcrossFiles = new Map(); // regNumber -> عدد الملفات المقروءة فعليًا بهذا الرقم المفرد
+    // filesByReg: رقم التسجيل -> كل الملفات المقروءة فعليًا بهذا الرقم المفرد (مسارها + الاسم
+    // المكتشَف بها) -- تُستخدَم فقط لإرفاق معلومة "أين النسخ الأخرى" بنتيجة كل ملف مكرر أدناه؛
+    // لا تُغيّر أبدًا حساب حالة DUPLICATE_ACROSS_FILES نفسها (نفس المنطق القديم حرفيًا:
+    // count > 1 لنفس الملاحظات والقيود -- فقط تُضاف بيانات إضافية عن التعارض).
+    const filesByReg = new Map();
     for (const f of fileScanResults) {
       if (f.outcome === 'read' && f.regNumbers.length === 1) {
         const r = f.regNumbers[0];
-        countAcrossFiles.set(r, (countAcrossFiles.get(r) || 0) + 1);
+        if (!filesByReg.has(r)) filesByReg.set(r, []);
+        filesByReg.get(r).push({ relativePath: f.relativePath, detectedName: f.detectedNameByReg.get(r) || '' });
       }
     }
 
     return fileScanResults.map((f) => {
       let status, regNumber = '', listName = '', detectedName = '';
       let candidateRegistrationNumber = '', candidateListName = '', evidence = [];
+      // معلومات التعارض الإضافية (0 افتراضيًا لكل الحالات غير المكرَّرة) -- لا تُستخدَم أبدًا
+      // لاختيار نسخة "صحيحة" تلقائيًا؛ عرض شفاف فقط لكل النسخ المتعارضة يتركه للمهندس/المراجع
+      // ليحسم يدويًا. الدراسة تبقى "موجودة" دومًا هنا (لا تختفي كأنها غير مكتشَفة إطلاقًا).
+      let duplicateCount = 0, duplicatePaths = [];
 
       if (f.outcome === 'ignored') {
         status = STATUS.IGNORED_TEMP_LOCK;
@@ -996,8 +1283,16 @@
         const r = f.regNumbers[0];
         regNumber = r;
         detectedName = f.detectedNameByReg.get(r) || '';
-        if ((countAcrossFiles.get(r) || 0) > 1) {
+        const siblings = filesByReg.get(r) || [];
+        if (siblings.length > 1) {
+          // نفس القاعدة القديمة حرفيًا (count > 1 => DUPLICATE_ACROSS_FILES)، بلا أي تغيير
+          // بالشرط ولا بالـstatus الناتج -- فقط نُرفق هنا كل مسارات النسخ المتعارضة، واسم
+          // المستفيد إن كان الرقم موجودًا بالقائمة الرئيسية (مفيد للمراجعة حتى لو الحسم
+          // بين النسخ لم يتم بعد؛ لا يُعتبَر هذا "اعتمادًا" لأي نسخة بعينها).
           status = STATUS.DUPLICATE_ACROSS_FILES;
+          listName = masterMap.get(r) || '';
+          duplicateCount = siblings.length;
+          duplicatePaths = siblings.map((s) => s.relativePath);
         } else if (masterMap.has(r)) {
           status = STATUS.MATCHED;
           listName = masterMap.get(r) || '';
@@ -1018,7 +1313,10 @@
         candidate_registration_number: candidateRegistrationNumber,
         candidate_list_name: candidateListName,
         evidence,
-        review_required: status === STATUS.POSSIBLE_MATCH || status === STATUS.AMBIGUOUS_CANDIDATES,
+        review_required: status === STATUS.POSSIBLE_MATCH || status === STATUS.AMBIGUOUS_CANDIDATES
+          || status === STATUS.DUPLICATE_ACROSS_FILES,
+        duplicate_count: duplicateCount,
+        duplicate_paths: duplicatePaths,
       };
     });
   }
@@ -1096,6 +1394,10 @@
     classifyFiles,
     buildCoverageCheck,
     buildReport,
+    AMOUNT_STATUS,
+    normalizeAmountText,
+    extractStudyAmount,
+    buildAmountsReport,
   };
 });
 
@@ -1133,9 +1435,22 @@
 
   let lastReport = null;
   let activeFilter = null;
+  let lastAmountsReport = null;
+  let amountsActiveFilter = null;
 
   function statusClass(status) {
     return 'st-' + (InventoryCore.STATUS_KEYS[status] || 'unknown');
+  }
+
+  // تسمية عرض ألطف فقط -- لا تُستخدَم إطلاقًا للفلترة ولا للتصدير (r.status الخام يبقى
+  // كما هو تمامًا بكل مكان آخر، بما يشمل ملف JSON المُصدَّر -- التوافق مع استيراد التطبيق
+  // المكتبي لهذا الحقل حرفيًا يبقى محفوظًا 100%). الهدف فقط توضيح الفرق للمهندس بين
+  // "الدراسة غير موجودة" و"الدراسة موجودة لكن يوجد أكثر من نسخة تحتاج حسمًا يدويًا".
+  function friendlyStatusLabel(status) {
+    if (status === InventoryCore.STATUS.DUPLICATE_ACROSS_FILES) {
+      return 'الدراسة موجودة — نسخ متعددة تحتاج مراجعة';
+    }
+    return status;
   }
 
   function showBox(box, msg) { box.textContent = msg; box.style.display = 'block'; }
@@ -1259,6 +1574,7 @@
     clearError();
     scanBtn.disabled = true;
     resultsCard.style.display = 'none';
+    amountsCard.style.display = 'none';
     progressWrap.style.display = 'block';
     progressBarInner.style.width = '0%';
 
@@ -1291,6 +1607,12 @@
       const report = InventoryCore.buildReport(selectedEngineer, masterFileName, classified);
       lastReport = report;
       renderResults(report);
+
+      // مبالغ الدراسات: تُبنى من نفس scanResults (نفس فحص الملفات، بلا أي إعادة قراءة) —
+      // ميزة إضافية مستقلة تمامًا لا تُغيّر تقرير الجرد أعلاه ولا JSON الخاص به بأي شكل.
+      const amountsReport = InventoryCore.buildAmountsReport(selectedEngineer, masterFileName, scanResults);
+      lastAmountsReport = amountsReport;
+      renderAmounts(amountsReport);
     } catch (e) {
       showError('تعذّر إتمام الفحص: ' + (e && e.message ? e.message : String(e)));
     } finally {
@@ -1328,7 +1650,7 @@
       const count = report.summary_counts[status] || 0;
       const cell = document.createElement('div');
       cell.className = 'summary-cell ' + statusClass(status);
-      cell.innerHTML = `<span class="n">${count}</span><span class="l">${status}</span>`;
+      cell.innerHTML = `<span class="n">${count}</span><span class="l">${escapeHtml(friendlyStatusLabel(status))}</span>`;
       cell.addEventListener('click', () => {
         activeFilter = activeFilter === status ? null : status;
         document.querySelectorAll('.summary-cell').forEach((c) => c.classList.remove('active'));
@@ -1349,21 +1671,147 @@
       if (activeFilter && r.status !== activeFilter) continue;
       if (q && !(r.relative_path.toLowerCase().includes(q) || r.registration_number.toLowerCase().includes(q))) continue;
       const isPossible = r.status === InventoryCore.STATUS.POSSIBLE_MATCH;
+      const isDuplicate = r.status === InventoryCore.STATUS.DUPLICATE_ACROSS_FILES;
       const regCell = isPossible ? `مرشَّح: ${r.candidate_registration_number}` : (r.registration_number || '—');
       const nameCell = isPossible ? r.candidate_list_name : r.list_name;
-      const noteCell = isPossible ? 'الأدلة: ' + r.evidence.join(' + ') : (r.reason || '');
+      // للحالة المكرَّرة: الدراسة "موجودة" فعلًا (ليست مفقودة) -- نعرض كل مسارات النسخ
+      // المتعارضة صراحة (لا reason عام غامض) كي يحسم المهندس/المراجع يدويًا أيها المعتمَد.
+      const noteCell = isPossible ? 'الأدلة: ' + r.evidence.join(' + ')
+        : isDuplicate ? `الدراسة موجودة — ${r.duplicate_count} نسخ تحتاج مراجعة:\n` + (r.duplicate_paths || []).join('\n')
+        : (r.reason || '');
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${escapeHtml(r.relative_path)}</td>
         <td>${escapeHtml(regCell)}</td>
         <td>${escapeHtml(nameCell || '—')}</td>
         <td>${escapeHtml(r.detected_name || '—')}</td>
-        <td><span class="status-pill ${statusClass(r.status)}">${escapeHtml(r.status)}</span></td>
-        <td>${escapeHtml(noteCell)}</td>`;
+        <td><span class="status-pill ${statusClass(r.status)}">${escapeHtml(friendlyStatusLabel(r.status))}</span></td>
+        <td style="white-space:pre-line">${escapeHtml(noteCell)}</td>`;
       resultsBody.appendChild(tr);
     }
   }
   searchBox.addEventListener('input', renderTable);
+
+  // ==================== مبالغ الدراسات: عرض + تصدير (JSON و CSV) ====================
+  const amountsCard = $('amountsCard');
+  const amountsSummaryGrid = $('amountsSummaryGrid');
+  const amountsBody = $('amountsBody');
+  const exportAmountsJsonBtn = $('exportAmountsJsonBtn');
+  const exportAmountsCsvBtn = $('exportAmountsCsvBtn');
+
+  function amountStatusClass(status) {
+    const S = InventoryCore.AMOUNT_STATUS;
+    if (status === S.EXTRACTED) return 'st-amt-extracted';
+    if (status === S.NEEDS_REVIEW) return 'st-amt-review';
+    if (status === S.NOT_A_STUDY) return 'st-amt-not-study';
+    return 'st-amt-unreadable';
+  }
+
+  function formatAmount(n) {
+    return n === null || n === undefined ? '—' : n.toLocaleString('ar');
+  }
+
+  function renderAmounts(report) {
+    amountsCard.style.display = 'block';
+    amountsActiveFilter = null;
+    amountsSummaryGrid.innerHTML = '';
+    const cells = [
+      ['excel_files_found', 'ملفات Excel المكتشفة'],
+      ['extracted', 'مبالغ مستخرَجة بنجاح'],
+      ['needs_review', 'تحتاج مراجعة'],
+      ['not_a_study', 'لم تُعرَف كدراسة'],
+      ['duplicate_family_groups', 'حالات مكررة'],
+    ];
+    for (const [key, label] of cells) {
+      const cell = document.createElement('div');
+      const cls = key === 'extracted' ? 'st-amt-extracted'
+        : key === 'needs_review' ? 'st-amt-review'
+        : key === 'not_a_study' ? 'st-amt-not-study'
+        : 'st-multi';
+      cell.className = 'summary-cell ' + cls;
+      cell.innerHTML = `<span class="n">${report.summary[key]}</span><span class="l">${escapeHtml(label)}</span>`;
+      if (key === 'extracted' || key === 'needs_review' || key === 'not_a_study') {
+        cell.addEventListener('click', () => {
+          const statusMap = {
+            extracted: InventoryCore.AMOUNT_STATUS.EXTRACTED,
+            needs_review: InventoryCore.AMOUNT_STATUS.NEEDS_REVIEW,
+            not_a_study: InventoryCore.AMOUNT_STATUS.NOT_A_STUDY,
+          };
+          const status = statusMap[key];
+          amountsActiveFilter = amountsActiveFilter === status ? null : status;
+          document.querySelectorAll('#amountsSummaryGrid .summary-cell').forEach((c) => c.classList.remove('active'));
+          if (amountsActiveFilter) cell.classList.add('active');
+          renderAmountsTable();
+        });
+      }
+      amountsSummaryGrid.appendChild(cell);
+    }
+    renderAmountsTable();
+    exportAmountsJsonBtn.disabled = false;
+    exportAmountsCsvBtn.disabled = false;
+  }
+
+  function renderAmountsTable() {
+    if (!lastAmountsReport) return;
+    amountsBody.innerHTML = '';
+    for (const r of lastAmountsReport.results) {
+      if (amountsActiveFilter && r.status !== amountsActiveFilter) continue;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.family_number || '—')}</td>
+        <td>${escapeHtml(r.beneficiary_name || '—')}</td>
+        <td>${escapeHtml(formatAmount(r.amount))}</td>
+        <td>${escapeHtml(r.source_file_name || '—')}</td>
+        <td>${escapeHtml(r.relative_path)}</td>
+        <td><span class="status-pill ${amountStatusClass(r.status)}">${escapeHtml(r.status)}</span></td>
+        <td style="white-space:pre-line">${escapeHtml(r.note || '')}</td>`;
+      amountsBody.appendChild(tr);
+    }
+  }
+
+  function exportAmountsJson() {
+    if (!lastAmountsReport) return;
+    const blob = new Blob([JSON.stringify(lastAmountsReport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '.shelter-amounts.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  function csvEscape(v) {
+    const s = v === null || v === undefined ? '' : String(v);
+    if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function exportAmountsCsv() {
+    if (!lastAmountsReport) return;
+    const header = ['رقم العائلة', 'المستفيد', 'المبلغ', 'ملف المصدر', 'المسار', 'الحالة', 'الملاحظة'];
+    const lines = [header.map(csvEscape).join(',')];
+    for (const r of lastAmountsReport.results) {
+      lines.push([
+        r.family_number || '', r.beneficiary_name || '', r.amount === null ? '' : r.amount,
+        r.source_file_name || '', r.relative_path, r.status, r.note || '',
+      ].map(csvEscape).join(','));
+    }
+    const csvText = '﻿' + lines.join('\r\n');
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '.shelter-amounts.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  exportAmountsJsonBtn.addEventListener('click', exportAmountsJson);
+  exportAmountsCsvBtn.addEventListener('click', exportAmountsCsv);
 
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({
