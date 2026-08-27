@@ -845,8 +845,12 @@
     normalizeHeaderForMatch('الكميات'),
     normalizeHeaderForMatch('كشف الكميات'),
     normalizeHeaderForMatch('جدول الكميات'),
+    normalizeHeaderForMatch('كشف كميات'),
+    normalizeHeaderForMatch('جدول كميات'),
+    normalizeHeaderForMatch('كشف الاعمال'),
+    normalizeHeaderForMatch('كشف الأعمال'),
     normalizeHeaderForMatch('كميات'),
-    'quantities', 'boq', 'bill of quantities', 'bill of quantity',
+    'quantities', 'boq', 'bill of quantities', 'bill of quantity', 'cost',
   ]);
 
   const TOTAL_LABEL_HEADERS = new Set([
@@ -862,8 +866,13 @@
     normalizeHeaderForMatch('اجمالي التكلفة'),
     normalizeHeaderForMatch('المبلغ الإجمالي'),
     normalizeHeaderForMatch('المبلغ الاجمالي'),
+    normalizeHeaderForMatch('المبلغ المعتمد'),
+    normalizeHeaderForMatch('المبلغ'),
     normalizeHeaderForMatch('التكلفة الإجمالية'),
     normalizeHeaderForMatch('التكلفة الاجمالية'),
+    normalizeHeaderForMatch('الكلفة النهائية'),
+    normalizeHeaderForMatch('usd الكلفة النهائية'),
+    normalizeHeaderForMatch('usd'),
     normalizeHeaderForMatch('قيمة الدراسة الإجمالية'),
     normalizeHeaderForMatch('قيمة الدراسة الاجمالية'),
     normalizeHeaderForMatch('المجموع النهائي'),
@@ -908,7 +917,8 @@
   function extractStudyAmount(rows) {
     const matchingSheets = new Set();
     for (const row of rows) {
-      if (QUANTITIES_SHEET_NAMES.has(normalizeHeaderForMatch(row.sheetName))) matchingSheets.add(row.sheetName);
+      const sn = String(row.sheetName || '').trim();
+      if (QUANTITIES_SHEET_NAMES.has(normalizeHeaderForMatch(sn))) matchingSheets.add(row.sheetName);
     }
     if (matchingSheets.size === 0) {
       return {
@@ -936,7 +946,7 @@
 
     const candidates = [];
     for (const hit of labelHits) {
-      const found = findNumericValueRightOf(hit.cells, hit.col, hit.row, 4);
+      const found = findNumericValueRightOf(hit.cells, hit.col, hit.row, 15);
       if (found) candidates.push({ value: found.value, ref: found.ref, sheet: hit.sheetName });
     }
     if (!candidates.length) {
@@ -1769,13 +1779,19 @@
     }
   }
 
+  function _safeFileName(prefix, ext) {
+    const eng = (selectedEngineer || 'المهندس').replace(/[\\/*?:"<>|\s]+/g, '_');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    return `${prefix}_${eng}_${dateStr}.${ext}`;
+  }
+
   function exportAmountsJson() {
     if (!lastAmountsReport) return;
     const blob = new Blob([JSON.stringify(lastAmountsReport, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = '.shelter-amounts.json';
+    a.download = _safeFileName('جرد_مبالغ_المهندس', 'shelter-amounts.json');
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1803,7 +1819,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = '.shelter-amounts.csv';
+    a.download = _safeFileName('جرد_مبالغ_المهندس', 'csv');
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1825,7 +1841,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = '.shelter-inventory.json';
+    a.download = _safeFileName('جرد_دراسات_المهندس', 'shelter-inventory.json');
     document.body.appendChild(a);
     a.click();
     a.remove();
